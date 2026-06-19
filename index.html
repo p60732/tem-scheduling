@@ -127,11 +127,12 @@ function openModal(html){document.getElementById('sheet').innerHTML=html;documen
 function closeModal(){document.getElementById('ov').classList.remove('show');}
 
 async function boot(){
-  S.me = cache.get('me');
-  // 進系統時刷新角色（避免管理員把你升級/降級後仍用舊快取）
-  if(token()){ try{const r=await api('getMe'); if(r.success&&r.data&&r.data.empId){S.me=r.data;cache.set('me',S.me,60);}}catch(e){} }
-  if(!S.me){ renderLogin(); return; }
-  S.view = 'emp'; renderEmp();
+  // 沒有有效 token 一律回登入頁
+  if(!token()){ renderLogin(); return; }
+  // 有 token → 向後端驗證並刷新角色；驗不過就回登入
+  let r=null; try{ r=await api('getMe'); }catch(e){}
+  if(r&&r.success&&r.data&&r.data.empId){ S.me=r.data; cache.set('me',S.me,60); S.view='emp'; renderEmp(); }
+  else { LS.clear(); S.me=null; renderLogin(); }
 }
 
 // ── 登入 ─────────────────────────────────────────────────
@@ -415,25 +416,42 @@ async function admEmp(){
     <input class="in" id="empq" placeholder="搜尋 工號/姓名" oninput="filterEmp()">
     <div id="emplist">${empRows(d.members)}</div></div>`;
 }
-function empRows(ms){return ms.map(m=>`<div class="row" onclick='empModal(${JSON.stringify(m)})'>
-  <span>${m.name} <span style="color:var(--mut)">${m.empId}·${m.shift}·${m.site}</span>${m.role!=='employee'?` <span class="tag">${m.role}</span>`:''}</span>
-  <span class="pill">編輯 ›</span></div>`).join('');}
+function empRows(ms){
+  const order=['DA','DB','NA','NB']; let h='';
+  order.forEach(sf=>{
+    const grp=ms.filter(m=>m.shift===sf); if(!grp.length)return;
+    h+=`<div class="grp" style="background:var(--bg);margin:8px -14px 0;padding:6px 14px">${sf} 班（${grp.length}）</div>`;
+    h+=grp.map(m=>`<div class="row" onclick='empModal(${JSON.stringify(m)})'>
+      <span>${m.name} <span style="color:var(--mut)">${m.empId}·${m.site}</span>${m.role!=='employee'?` <span class="tag">${m.role}</span>`:''}${(m.skills||[]).includes('產假')?' <span class="tag" style="background:#fbeaf0;color:#993556">產假</span>':''}</span>
+      <span class="pill">編輯 ›</span></div>`).join('');
+  });
+  return h;
+}
 function filterEmp(){const q=document.getElementById('empq').value.trim();const ms=_static.members.filter(m=>m.empId.includes(q)||m.name.includes(q));document.getElementById('emplist').innerHTML=empRows(ms);}
+let editingEmp=null;
 function empModal(m){
-  m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee'};
+  m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee',skills:[]};
+  editingEmp=m;
+  const mat=(m.skills||[]).includes('產假');
   openModal(`<h3>${m.empId?'編輯':'新增'}員工</h3>
     <div class="lbl">工號</div><input class="in" id="m_id" value="${m.empId}" ${m.empId?'disabled':''}>
     <div class="lbl">姓名</div><input class="in" id="m_name" value="${m.name||''}">
     <div class="lbl">班別</div><select class="in" id="m_shift">${['DA','DB','NA','NB'].map(s=>`<option ${m.shift===s?'selected':''}>${s}</option>`).join('')}</select>
     <div class="lbl">Site</div><select class="in" id="m_site">${['P2','P6','P7','P8'].map(s=>`<option ${m.site===s?'selected':''}>${s}</option>`).join('')}</select>
     <div class="lbl">密碼（留空＝工號末4碼）</div><input class="in" id="m_pwd" placeholder="${(m.empId||'').slice(-4)}">
+    <div class="opt" style="margin-top:10px"><span>產假中（不計人力，整月顯示預排產假）</span><span class="sw ${mat?'on':''}" id="m_mat" onclick="this.classList.toggle('on')"></span></div>
     <div class="btn pri" style="margin-top:12px" onclick="saveEmp()">儲存</div>
     ${m.empId?`<div class="btn dg" style="margin-top:8px" onclick="delEmp('${m.empId}')">刪除員工</div>`:''}`);
 }
 async function saveEmp(){
   const d={empId:document.getElementById('m_id').value.trim(),name:document.getElementById('m_name').value.trim(),
-    shift:document.getElementById('m_shift').value,site:document.getElementById('m_site').value,pwd:document.getElementById('m_pwd').value.trim()};
+    shift:document.getElementById('m_shift').value,site:document.getElementById('m_site').value};
+  const pwd=document.getElementById('m_pwd').value.trim(); if(pwd)d.pwd=pwd;
   if(!d.empId||!d.name){toast('工號/姓名必填');return;}
+  // 產假：在既有技能上加/移除「產假」標記
+  const mat=document.getElementById('m_mat').classList.contains('on');
+  let sk=((editingEmp&&editingEmp.skills)||['nonCS']).filter(s=>s!=='產假');
+  if(mat)sk.push('產假'); d.skills=sk;
   closeModal();toast('儲存中…');const r=await api('upsertEmployee',d);
   if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);
 }
