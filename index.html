@@ -46,7 +46,13 @@
   table.mt th,table.mt td{border:.5px solid var(--line);padding:5px 7px;text-align:center;min-width:48px}
   table.mt th{background:#f1efe8;color:var(--mut);font-weight:600}
   table.mt td.rk{background:#f1efe8;font-family:ui-monospace,monospace;text-align:left;position:sticky;left:0}
-  td.disp{background:var(--lvbg);color:#26215c}.empty{color:var(--danger)}.stp{color:var(--mut)}
+  td.disp{background:var(--lvbg);color:#26215c}.empty{color:var(--danger);background:#fcebeb}.stp{color:var(--mut);background:#f1efe8}
+  td.sP2{background:#fbeee7}td.sP6{background:#e3f3ea}td.sP7{background:#fbf0db}td.sP8{background:#e8f1fb}
+  .cell.offday{background:#cdd0d7}.cell.offday .dn{color:#5f5e5a}
+  .pcell{border-radius:6px;min-height:40px;border:.5px solid var(--line);font-size:12px;padding:3px;cursor:pointer;text-align:center}
+  .pcell .dn{color:var(--mut)}
+  .pcell.nh{background:#fcebeb;border-color:#e24b4a;color:#a32d2d;font-weight:600}
+  .pcell.fx{background:#faeeda;border-color:#ef9f27;color:#633806;font-weight:600}
   .atag{font-size:9px;background:var(--infobg);color:#0c447c;border-radius:3px;padding:0 3px;margin-left:2px}
   .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#1c1d22;color:#fff;padding:9px 16px;border-radius:20px;font-size:14px;z-index:50;opacity:0;transition:.25s}
   .toast.show{opacity:.95}
@@ -190,7 +196,7 @@ function calHtml(days){
     if(x.type==='work'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell work"><div class="dn">${dn}</div><div class="st">${x.site||''}</div><div class="mc">${m}</div></div>`;}
     else if(x.type==='ot'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell ot"><div class="dn">${dn}</div><div class="st">加班 ${x.site||''}</div><div class="mc">${m}</div></div>`;}
     else if(x.type==='leave'){cells+=`<div class="cell lv"><div class="dn">${dn}</div><div class="st">${(x.leave||'').replace('預排-','')}</div></div>`;}
-    else {cells+=`<div class="cell"><div class="dn">${dn}</div>${x.block?'<span class="xx">✕</span>':''}</div>`;}
+    else {cells+=`<div class="cell offday"><div class="dn">${dn}</div>${x.block?'<span class="xx">✕</span>':'<div class="st" style="color:#5f5e5a;font-weight:400;font-size:11px">休</div>'}</div>`;}
   });
   return `<div class="cal"><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div><div class="dow">日</div>${cells}</div>
   <div class="legend"><span><i style="background:var(--work)"></i>當班(機台)</span><span><i style="background:var(--ot)"></i>加班</span><span><i style="background:var(--lv)"></i>請假</span><span><b style="color:var(--danger)">✕</b>不可加班</span><span><i class="tag">派</i>派工</span></div>`;
@@ -276,6 +282,7 @@ async function renderAdmin(){
   app().innerHTML=`<div class="top"><b>管理 · ${S.me.shift} · ${S.ym}</b>
     <span class="mgr" onclick="S.view='emp';renderEmp()">⇄ 員工頁</span></div>
     <div class="body" id="abody">載入中…</div>`;
+  await loadStatic();
   const r=await api('getMachineTable',{ym:S.ym,shift:S.me.shift});
   const g=r.success?r.data:{days:[],rows:[]};
   document.getElementById('abody').innerHTML=`
@@ -284,7 +291,7 @@ async function renderAdmin(){
       <div class="gw">${gridHtml(g)}</div>
       <div class="warn">提示：P7空機 / 剩餘人力 / FIB未排（鎖定前檢查）</div>
       <div class="grp">整月</div>
-      <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="toast('整月清除')">整月清除</div></div>
+      <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="clearMonth()">整月清除</div></div>
       <div class="grp">輸出</div>
       <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（前端 canvas，待接）')">截圖存圖</div></div>
       <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
@@ -303,20 +310,59 @@ function admShell(title,inner){
   document.querySelector('.top b').onclick=renderAdmin;
 }
 
-// 建立月份
+// 建立月份（國假/變形工時用月曆點選；AUTO 配對可選機台組合）
+let cycleDraft={nh:{},fx:{},pickMode:'nh'};
 function admCycle(){
+  cycleDraft={nh:{},fx:{},pickMode:'nh'};
+  renderCycle();
+}
+function renderCycle(){
   const nm=nextMonth();
   admShell('建立月份',`<div class="card"><b>建立 ${nm} 基礎班表</b>
     <div class="lbl">自動帶入 BBAA 四班日曆（DA/DB/NA/NB）</div>
-    <div class="grp">① 國假日期（出班）</div>
-    <input class="in" placeholder="例 ${nm}-03,${nm}-15（逗號分隔）" id="nh">
-    <div class="grp">② 變形工時</div>
-    <div class="row"><span>B 組</span><input class="in" style="width:120px" placeholder="最多天數" value="2"></div>
-    <div class="grp">③ Stage 截止時間</div>
-    ${['Stage1','Stage2','Stage3'].map(s=>`<div class="row"><span>${s}</span><input class="in" style="width:160px" type="date"></div>`).join('')}
-    <div class="grp">④ AUTO 機台配對方案</div>
-    <select class="in"><option>P2 方案1</option><option>P2 方案2</option></select>
-    <div class="btn pri" style="margin-top:12px" onclick="toast('已建立 ${nm} 並開放 Stage1，舊月份已清理');renderAdmin()">建立月份並開放 Stage1</div></div>`);
+    <div class="grp">① 月曆點選：國假日 / 變形工時日</div>
+    <div class="seg" id="pmseg"><div class="${cycleDraft.pickMode==='nh'?'on':''}" onclick="cycleDraft.pickMode='nh';renderCycle()">國假日</div><div class="${cycleDraft.pickMode==='fx'?'on':''}" onclick="cycleDraft.pickMode='fx';renderCycle()">變形工時日</div></div>
+    <div id="cycCal">${cycleCalHtml(nm)}</div>
+    <div class="legend"><span><i style="background:#e24b4a;width:12px;height:12px;border-radius:3px;display:inline-block"></i> 國假(${Object.keys(cycleDraft.nh).length})</span><span><i style="background:#ef9f27;width:12px;height:12px;border-radius:3px;display:inline-block"></i> 變形工時(${Object.keys(cycleDraft.fx).length})</span></div>
+    <div class="row" style="margin-top:6px"><span>變形工時：最多加班天數</span><input class="in" id="fxmax" style="width:90px" value="2"></div>
+    <div class="grp">② Stage 截止時間</div>
+    ${['s1','s2','s3'].map((s,i)=>`<div class="row"><span>Stage${i+1}</span><input class="in" id="${s}" style="width:170px" type="date"></div>`).join('')}
+    <div class="grp">③ AUTO 機台配對組合</div>
+    <div class="row"><span style="color:var(--mut);font-size:13px">設定哪些 AUTO 機台兩兩一組</span><span class="pill" onclick="autoPairEditor()">編輯配對 ›</span></div>
+    <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份並開放 Stage1</div></div>`);
+}
+function cycleCalHtml(nm){
+  const days=monthDays(nm), first=new Date(days[0]).getDay()||7;
+  let c=''; for(let i=1;i<first;i++)c+='<div></div>';
+  days.forEach(ds=>{const dn=Number(ds.slice(8));const cls=cycleDraft.nh[ds]?'nh':cycleDraft.fx[ds]?'fx':'';c+=`<div class="pcell ${cls}" onclick="cycPick('${ds}')"><div class="dn">${dn}</div></div>`;});
+  return `<div class="cal"><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div><div class="dow">日</div>${c}</div>`;
+}
+function cycPick(ds){
+  const m=cycleDraft.pickMode, other=m==='nh'?'fx':'nh';
+  if(cycleDraft[m][ds]) delete cycleDraft[m][ds]; else { cycleDraft[m][ds]=true; delete cycleDraft[other][ds]; }
+  renderCycle();
+}
+async function autoPairEditor(){
+  const d=await loadStatic();
+  const autos=d.tools.filter(t=>t.type==='auto'||t.status==='AUTO');
+  openModal(`<h3>AUTO 機台配對組合</h3>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:8px">同一「配對組」名稱的機台會被視為一組（一人顧）。</div>
+    ${autos.map(t=>`<div class="row"><span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut)">${t.site}</span></span>
+      <input class="in" style="width:120px" value="${t.auto_pair||''}" placeholder="組名 如P2_1A" onchange="savePair('${t.tool_id}',this.value)"></div>`).join('')}
+    <div class="btn pri" style="margin-top:10px" onclick="closeModal()">完成</div>`);
+}
+async function savePair(id,group){
+  const t=(_static.tools||[]).find(x=>x.tool_id===id)||{};
+  await api('upsertMachine',{tool_id:id,site:t.site,type:t.type,status:t.status,auto_pair:group.trim(),sort_order:t.sort_order,toolName:id});
+  await loadStatic(true); toast(id+' 配對組='+group);
+}
+async function saveCycle(){
+  const nm=nextMonth();
+  const data={ym:nm,national_holidays:Object.keys(cycleDraft.nh),
+    flex:Object.keys(cycleDraft.fx).length?[{group:'B',dates:Object.keys(cycleDraft.fx),max_days:Number(document.getElementById('fxmax').value||2),desc:'變形工時'}]:[],
+    deadlines:{s1:document.getElementById('s1').value,s2:document.getElementById('s2').value,s3:document.getElementById('s3').value}};
+  toast('建立中…'); const r=await api('createCycle',data);
+  if(r.success){toast('已建立 '+nm+'，舊月份已清理');renderAdmin();}else toast('建立：'+r.error);
 }
 
 // 取得靜態資料（員工/機台），快取
@@ -471,18 +517,25 @@ function admOt(){
     <div class="g2" style="margin-top:12px"><div class="btn" onclick="toast('已發催促')">催促提醒</div><div class="btn pri" onclick="toast('強制推進 Stage3')">強制推進</div></div></div>`);
 }
 function gridHtml(g){
+  if(g.notCreated) return `<div style="padding:16px;text-align:center;color:var(--mut)">
+    <div style="font-size:15px;margin-bottom:8px">尚未建立此月份</div>
+    <div class="btn pri" style="display:inline-flex;width:auto;padding:8px 16px" onclick="admCycle()">前往建立月份</div></div>`;
   if(!g.rows.length) return '<div style="padding:10px;color:var(--mut)">尚無資料（需先建立月份/排班）</div>';
+  const tmap={}; ((_static&&_static.tools)||[]).forEach(t=>tmap[t.tool_id]=t.site);
+  const siteOf=rk=>String(rk).charAt(0)==='@'?rk.slice(1):tmap[rk];
   let h='<table class="mt"><tr><th>機台\\日</th>'+g.days.map(d=>`<th>${Number(d.slice(8))}</th>`).join('')+'</tr>';
   g.rows.forEach(r=>{
-    const disp=String(r.rowKey).charAt(0)==='@';
-    h+=`<tr><td class="rk">${r.rowKey}</td>`+r.cells.map(c=>{
-      let cls=disp?'disp':''; if(c==='空機')cls='empty'; if(['停機','DOWN','CRYO','OFF','TEST'].includes(c))cls='stp';
+    const disp=String(r.rowKey).charAt(0)==='@'; const site=siteOf(r.rowKey);
+    const sc=site?(' s'+site):'';
+    h+=`<tr><td class="rk${sc}">${r.rowKey}</td>`+r.cells.map(c=>{
+      let cls=disp?'disp':sc.trim(); if(c==='空機')cls='empty'; if(['停機','DOWN','CRYO','OFF','TEST'].includes(c))cls='stp';
       return `<td class="${cls}">${c||''}</td>`;
     }).join('')+'</tr>';
   });
   return h+'</table>';
 }
 async function runAuto(){ toast('自動排班中…'); const r=await api('autoAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('草稿完成');renderAdmin();}else toast('排班：'+r.error); }
+async function clearMonth(){ if(!confirm('確定清除 '+S.ym+' '+S.me.shift+' 整月排班？'))return; toast('清除中…'); const r=await api('clearAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('已清除 '+(r.data&&r.data.cleared||0)+' 日');renderAdmin();}else toast('清除：'+r.error); }
 async function doExport(){ toast('產生 Excel…'); const r=await api('exportExcel',{ym:S.ym,shift:S.me.shift}); if(r.success&&r.data.url){window.open(r.data.url,'_blank');toast('已產生，開始下載');}else toast(r.success?'demo：已產生 EXPORT 分頁':'匯出：'+r.error); }
 
 // ============================================================
