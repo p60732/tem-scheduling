@@ -290,7 +290,7 @@ async function renderAdmin(){
       <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
     </div>
     <div class="card"><b>管理設定</b>
-      ${[['建立月份','admCycle'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['角色設定','admRole'],['員工技能清單','admSkill'],['加班統計','admOt']]
+      ${[['建立月份','admCycle'],['人力清單','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['角色設定','admRole'],['員工技能清單','admSkill'],['加班統計','admOt']]
         .map(([t,fn])=>`<div class="row" onclick="${fn}()"><span>${t}</span><span style="color:var(--mut)">›</span></div>`).join('')}
     </div>`;
 }
@@ -319,19 +319,100 @@ function admCycle(){
     <div class="btn pri" style="margin-top:12px" onclick="toast('已建立 ${nm} 並開放 Stage1，舊月份已清理');renderAdmin()">建立月份並開放 Stage1</div></div>`);
 }
 
-// 機台狀態排程
+// 取得靜態資料（員工/機台），快取
+let _static=null;
+async function loadStatic(force){
+  if(_static&&!force) return _static;
+  const c=cache.get('static'); if(c&&!force){_static=c;return c;}
+  const r=await api('getStatic'); if(r.success){_static=r.data;cache.set('static',r.data,60);return r.data;}
+  return {members:[],tools:[]};
+}
+
+// 人力清單（管理員）— 列出 / 新增 / 編輯
+async function admEmp(){
+  admShell('人力清單','<div class="card">載入中…</div>');
+  const d=await loadStatic();
+  const body=document.querySelector('.body');
+  body.innerHTML=`<div class="card">
+    <div class="row"><b>人力清單（${d.members.length}）</b><span class="pill" onclick="empModal()">＋ 新增員工</span></div>
+    <input class="in" id="empq" placeholder="搜尋 工號/姓名" oninput="filterEmp()">
+    <div id="emplist">${empRows(d.members)}</div></div>`;
+}
+function empRows(ms){return ms.map(m=>`<div class="row" onclick='empModal(${JSON.stringify(m)})'>
+  <span>${m.name} <span style="color:var(--mut)">${m.empId}·${m.shift}·${m.site}</span>${m.role!=='employee'?` <span class="tag">${m.role}</span>`:''}</span>
+  <span class="pill">編輯 ›</span></div>`).join('');}
+function filterEmp(){const q=document.getElementById('empq').value.trim();const ms=_static.members.filter(m=>m.empId.includes(q)||m.name.includes(q));document.getElementById('emplist').innerHTML=empRows(ms);}
+function empModal(m){
+  m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee'};
+  openModal(`<h3>${m.empId?'編輯':'新增'}員工</h3>
+    <div class="lbl">工號</div><input class="in" id="m_id" value="${m.empId}" ${m.empId?'disabled':''}>
+    <div class="lbl">姓名</div><input class="in" id="m_name" value="${m.name||''}">
+    <div class="lbl">班別</div><select class="in" id="m_shift">${['DA','DB','NA','NB'].map(s=>`<option ${m.shift===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="lbl">Site</div><select class="in" id="m_site">${['P2','P6','P7','P8'].map(s=>`<option ${m.site===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="lbl">密碼（留空＝工號末4碼）</div><input class="in" id="m_pwd" placeholder="${(m.empId||'').slice(-4)}">
+    <div class="btn pri" style="margin-top:12px" onclick="saveEmp()">儲存</div>
+    ${m.empId?`<div class="btn dg" style="margin-top:8px" onclick="delEmp('${m.empId}')">刪除員工</div>`:''}`);
+}
+async function saveEmp(){
+  const d={empId:document.getElementById('m_id').value.trim(),name:document.getElementById('m_name').value.trim(),
+    shift:document.getElementById('m_shift').value,site:document.getElementById('m_site').value,pwd:document.getElementById('m_pwd').value.trim()};
+  if(!d.empId||!d.name){toast('工號/姓名必填');return;}
+  closeModal();toast('儲存中…');const r=await api('upsertEmployee',d);
+  if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);
+}
+async function delEmp(id){closeModal();toast('刪除中…');const r=await api('deleteEmployee',{empId:id});if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);}
+
+// 機台清單（管理員）
+async function admTool(){
+  admShell('機台清單','<div class="card">載入中…</div>');
+  const d=await loadStatic();
+  document.querySelector('.body').innerHTML=`<div class="card">
+    <div class="row"><b>機台清單（${d.tools.length}）</b><span class="pill" onclick="toolModal()">＋ 新增機台</span></div>
+    ${d.tools.map(t=>`<div class="row" onclick='toolModal(${JSON.stringify(t)})'>
+      <span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut);font-family:var(--font-sans)">${t.site}·${t.type}·${t.status}</span></span>
+      <span class="pill">編輯 ›</span></div>`).join('')}</div>`;
+}
+function toolModal(t){
+  t=t||{tool_id:'',site:'P2',type:'manual',status:'ACTIVE',auto_pair:'',sort_order:99};
+  openModal(`<h3>${t.tool_id?'編輯':'新增'}機台</h3>
+    <div class="lbl">機台 ID</div><input class="in" id="t_id" value="${t.tool_id}" ${t.tool_id?'disabled':''}>
+    <div class="lbl">Site</div><select class="in" id="t_site">${['P2','P6','P7','P8'].map(s=>`<option ${t.site===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="lbl">型態</div><select class="in" id="t_type">${['manual','auto'].map(s=>`<option ${t.type===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="lbl">AUTO 配對組（如 P2_1A，可空）</div><input class="in" id="t_pair" value="${t.auto_pair||''}">
+    <div class="btn pri" style="margin-top:12px" onclick="saveTool(${t.sort_order||99})">儲存</div>
+    ${t.tool_id?`<div class="btn dg" style="margin-top:8px" onclick="delTool('${t.tool_id}')">刪除機台</div>`:''}`);
+}
+async function delTool(id){closeModal();toast('刪除中…');const r=await api('deleteMachine',{tool_id:id});if(r.success){await loadStatic(true);admTool();}else toast('失敗：'+r.error);}
+async function saveTool(sort){
+  const type=document.getElementById('t_type').value;
+  const d={tool_id:document.getElementById('t_id').value.trim(),site:document.getElementById('t_site').value,type:type,
+    status:type==='auto'?'AUTO':'ACTIVE',auto_pair:document.getElementById('t_pair').value.trim(),sort_order:sort,toolName:document.getElementById('t_id').value.trim()};
+  if(!d.tool_id){toast('機台 ID 必填');return;}
+  closeModal();toast('儲存中…');const r=await api('upsertMachine',d);
+  if(r.success){await loadStatic(true);admTool();}else toast('失敗：'+r.error);
+}
+
+// 機台狀態排程（管理員）
 const MACH_STATUS=['ACTIVE','AUTO','空機','OFF','CRYO','DOWN','TEST'];
-function admMach(){
-  const tools=[['BXTM01','P2','ACTIVE'],['BXTM02','P2','AUTO'],['LXTM04','P8','DOWN'],['KXTM10','P7','ACTIVE']];
-  admShell('機台狀態排程',`<div class="card">
-    <div class="row"><b>機台狀態 · ${S.ym}</b><span class="pill" onclick="toast('新增機台')">＋ 新增機台</span></div>
-    ${tools.map(([id,site,st])=>`<div class="row" onclick="machModal('${id}','${st}')"><span style="font-family:ui-monospace,monospace">${id} <span style="color:var(--mut)">${site}</span></span><span class="pill">${st} ›</span></div>`).join('')}
-    <div style="font-size:12px;color:var(--mut);margin-top:8px">點機台設定單日/區間狀態。</div></div>`);
+async function admMach(){
+  admShell('機台狀態排程','<div class="card">載入中…</div>');
+  const d=await loadStatic();
+  document.querySelector('.body').innerHTML=`<div class="card"><b>機台狀態 · ${S.ym}</b>
+    ${d.tools.map(t=>`<div class="row" onclick="machModal('${t.tool_id}','${t.status}')">
+      <span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut);font-family:var(--font-sans)">${t.site}</span></span>
+      <span class="pill">${t.status} ›</span></div>`).join('')}
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">點機台設定單日/區間狀態。</div></div>`;
 }
 function machModal(id,cur){
   openModal(`<h3>${id} · 設定狀態</h3>
-    ${MACH_STATUS.map(s=>`<div class="opt" onclick="toast('${id} → ${s}');closeModal()"><span>${s}</span>${s===cur?'<b style="color:var(--ok)">✓</b>':''}</div>`).join('')}
-    <div class="row" style="margin-top:8px"><input class="in" type="date" style="width:46%"><input class="in" type="date" style="width:46%"></div>`);
+    ${MACH_STATUS.map(s=>`<div class="opt" onclick="saveMach('${id}','${s}')"><span>${s}</span>${s===cur?'<b style="color:var(--ok)">✓</b>':''}</div>`).join('')}
+    <div class="row" style="margin-top:8px"><input class="in" type="date" id="ms_s" style="width:46%"><input class="in" type="date" id="ms_e" style="width:46%"></div>`);
+}
+async function saveMach(id,st){
+  const s=document.getElementById('ms_s').value, e=document.getElementById('ms_e').value;
+  closeModal();toast('設定中…');
+  const r=await api('setMachineStatus',{tool_id:id,status:st,start_date:s||S.ym+'-01',end_date:e||s||S.ym+'-01'});
+  if(r.success){await loadStatic(true);admMach();}else toast('失敗：'+r.error);
 }
 
 // 雙棲人員設定（清單 + 下月出勤月曆）
