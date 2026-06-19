@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>排班系統</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#e3e5ea;--ink:#1c1d22;--mut:#6b6f76;--info:#185fa5;--infobg:#e6f1fb;
+    --work:#85b7eb;--workbg:#e6f1fb;--ot:#ef9f27;--otbg:#faeeda;--lv:#afa9ec;--lvbg:#eeedfe;--danger:#a32d2d;--dangerbg:#fcebeb;--ok:#0f6e56;--okbg:#e1f5ee;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);display:flex;flex-direction:column}
+  .top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--card);border-bottom:.5px solid var(--line);position:sticky;top:0;z-index:5}
+  .top b{font-size:16px;font-weight:600}
+  .body{flex:1;padding:12px;overflow-y:auto}
+  .card{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:11px;border:.5px solid var(--line);border-radius:9px;font-size:15px;background:var(--card);cursor:pointer}
+  .btn.pri{background:var(--info);color:#fff;border-color:var(--info)}
+  .btn.dg{color:var(--danger);border-color:#f0a0a0}
+  .btn:active{transform:scale(.98)}
+  .in{width:100%;height:42px;border:.5px solid var(--line);border-radius:9px;padding:0 12px;font-size:15px;margin-top:6px}
+  .lbl{font-size:13px;color:var(--mut);margin-top:10px}
+  .seg{display:flex;border:.5px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:10px}
+  .seg div{flex:1;text-align:center;padding:9px;font-size:14px}.seg .on{background:var(--info);color:#fff;font-weight:600}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dow{font-size:12px;color:var(--mut);text-align:center;padding:2px}
+  .cell{border-radius:7px;min-height:52px;padding:4px;border:.5px solid var(--line);font-size:12px;position:relative;cursor:pointer}
+  .cell .dn{color:var(--mut)}.cell .st{font-weight:600;line-height:1.25}.cell .mc{font-family:ui-monospace,monospace}
+  .work{background:var(--workbg);border-color:var(--work)}.work .st,.work .mc{color:#0c447c}
+  .ot{background:var(--otbg);border-color:var(--ot)}.ot .st,.ot .mc{color:#633806}
+  .lv{background:var(--lvbg);border-color:var(--lv)}.lv .st{color:#26215c}
+  .xx{position:absolute;top:3px;right:5px;color:var(--danger);font-weight:700}
+  .tag{font-size:11px;padding:0 4px;border-radius:4px;background:#cecbf6;color:#26215c;font-weight:600}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px;color:var(--mut)}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;vertical-align:-1px;margin-right:3px}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:11px 2px;border-bottom:.5px solid var(--line);gap:8px}
+  .row:last-child{border:none}
+  .pill{font-size:13px;padding:5px 11px;border:.5px solid var(--line);border-radius:14px;cursor:pointer;white-space:nowrap}
+  .pill.on{background:var(--okbg);border-color:#5dcaa5;color:var(--ok);font-weight:600}
+  .pill.no{background:var(--dangerbg);border-color:#f0a0a0;color:var(--danger);font-weight:600}
+  .tab{display:flex;background:var(--card);border-top:.5px solid var(--line);position:sticky;bottom:0}
+  .tab div{flex:1;text-align:center;padding:8px 0 9px;font-size:11px;color:var(--mut);cursor:pointer}
+  .tab div.on{color:var(--info)}.tab .ic{display:block;font-size:21px;line-height:1.1}
+  .gw{overflow-x:auto;border:.5px solid var(--line);border-radius:9px}
+  table.mt{border-collapse:collapse;font-size:12px;white-space:nowrap}
+  table.mt th,table.mt td{border:.5px solid var(--line);padding:5px 7px;text-align:center;min-width:48px}
+  table.mt th{background:#f1efe8;color:var(--mut);font-weight:600}
+  table.mt td.rk{background:#f1efe8;font-family:ui-monospace,monospace;text-align:left;position:sticky;left:0}
+  td.disp{background:var(--lvbg);color:#26215c}.empty{color:var(--danger)}.stp{color:var(--mut)}
+  .atag{font-size:9px;background:var(--infobg);color:#0c447c;border-radius:3px;padding:0 3px;margin-left:2px}
+  .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#1c1d22;color:#fff;padding:9px 16px;border-radius:20px;font-size:14px;z-index:50;opacity:0;transition:.25s}
+  .toast.show{opacity:.95}
+  .mgr{font-size:13px;padding:5px 11px;border-radius:14px;background:var(--lvbg);color:#26215c;border:.5px solid var(--lv);font-weight:600;cursor:pointer}
+  .grp{font-size:13px;color:var(--mut);margin:12px 0 6px;font-weight:600}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .warn{display:flex;gap:6px;font-size:13px;background:var(--otbg);color:#633806;padding:9px 11px;border-radius:9px;margin:8px 0}
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;justify-content:center;z-index:40}
+  .ov.show{display:flex}
+  .sheet{background:var(--card);width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:80vh;overflow-y:auto}
+  .sheet h3{margin:0 0 10px;font-size:16px}
+  .opt{display:flex;align-items:center;justify-content:space-between;padding:11px 4px;border-bottom:.5px solid var(--line);cursor:pointer}
+  .opt:last-child{border:none}
+  .sw{width:42px;height:24px;border-radius:13px;background:var(--line);position:relative;flex:none;cursor:pointer}
+  .sw.on{background:#5dcaa5}.sw::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.15s}.sw.on::after{left:20px}
+  .cell.pickL{background:var(--lvbg);border-color:var(--lv)}.cell.pickL .st{color:#26215c}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<div class="ov" id="ov" onclick="if(event.target.id==='ov')closeModal()"><div class="sheet" id="sheet"></div></div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const API_BASE = 'https://script.google.com/macros/s/AKfycbyBVNnL2ZEoGfjFoamaStN8FWc6mCFGez5p_nyxw1uU-JA4wFQIxVOaoQgl_afa2LtDeQ/exec'; // GAS Web App；留空則用內建 mock
+const SHIFT_LABEL = {DA:'DA 日A',DB:'DB 日B',NA:'NA 夜A',NB:'NB 夜B'};
+const PEER = {DA:'DB',DB:'DA',NA:'NB',NB:'NA'};
+const LEAVE_TYPES = ['預排-特休','預排-補休','預排-國假','預排-生理假','預排-事假','預排-家庭照顧假','預排-幼兒照顧假','預排-喪假','預排-健檢假','預排-陪產假','預排-產假','預排-產檢假'];
+
+// ============================================================
+// API 層（含樂觀更新 / localStorage 快取）
+// ============================================================
+// localStorage 安全層（沙箱 iframe 可能擋 localStorage → 改用記憶體）
+const _mem={};
+const LS={
+  get(k){try{return localStorage.getItem(k)}catch(e){return (k in _mem)?_mem[k]:null}},
+  set(k,v){try{localStorage.setItem(k,v)}catch(e){_mem[k]=v}},
+  del(k){try{localStorage.removeItem(k)}catch(e){delete _mem[k]}},
+  clear(){try{localStorage.clear()}catch(e){}for(const k in _mem)delete _mem[k]}
+};
+const cache = {
+  set(k,d,min=10){LS.set('sc_'+k,JSON.stringify({d,e:Date.now()+min*60000}))},
+  get(k){try{const x=JSON.parse(LS.get('sc_'+k));if(!x||Date.now()>x.e)return null;return x.d}catch(e){return null}},
+  del(k){LS.del('sc_'+k)}
+};
+const token = ()=>LS.get('token')||'';
+async function api(action,data){
+  if(!API_BASE) return mockApi(action,data); // demo 模式
+  const res = await fetch(API_BASE,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:token(),data})});
+  return res.json();
+}
+
+// ============================================================
+// BBAA 班別曆（前端也算，省往返）
+// ============================================================
+const BASE = new Date('2026-05-20');
+function shiftType(ds){const diff=Math.floor((new Date(ds)-BASE)/86400000);const p=((diff%4)+4)%4;return p<2?'B':'A';}
+function groupOf(sf){return (sf==='DA'||sf==='NA')?'A':'B';}
+function monthDays(ym){const[y,m]=ym.split('-').map(Number);const n=new Date(y,m,0).getDate();const a=[];for(let d=1;d<=n;d++)a.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);return a;}
+
+// ============================================================
+// 狀態 + 路由
+// ============================================================
+const S = { me:null, ym:'2026-06', tab:'cal', view:'emp' };
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800);}
+const app = ()=>document.getElementById('app');
+function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('ov').classList.add('show');}
+function closeModal(){document.getElementById('ov').classList.remove('show');}
+
+function boot(){
+  S.me = cache.get('me');
+  if(!S.me){ renderLogin(); return; }
+  S.view = 'emp'; renderEmp();
+}
+
+// ── 登入 ─────────────────────────────────────────────────
+function renderLogin(){
+  app().innerHTML = `
+  <div class="body" style="padding-top:60px">
+    <div class="card">
+      <b style="font-size:18px">排班系統</b>
+      <div class="lbl">工號</div><input class="in" id="eid" inputmode="numeric" placeholder="例 095396">
+      <div class="lbl">密碼（末4碼）</div><input class="in" id="epw" type="password" inputmode="numeric" placeholder="••••">
+      <div class="btn pri" style="margin-top:14px" onclick="doLogin()">登入</div>
+      <div style="font-size:12px;color:var(--mut);margin-top:10px">demo：095396 / 5396（黃國化 DA·GL）、152459 / 2459（許志維 NA）</div>
+    </div>
+  </div>`;
+}
+async function doLogin(){
+  let id=document.getElementById('eid').value.trim().padStart(6,'0'); // 工號補滿6碼
+  const pw=document.getElementById('epw').value.trim().padStart(4,'0'); // 末4碼含前導零
+  const r = await api('login',{empId:id,pwd:pw});
+  if(!r.success){ toast(r.error||'登入失敗'); return; }
+  LS.set('token',r.data.token);
+  S.me = r.data.employee; cache.set('me',S.me,60*24);
+  boot();
+}
+function logout(){ LS.clear(); S.me=null; renderLogin(); }
+
+// ── 員工頁殼（4 分頁 + 管理切換）─────────────────────────
+function isManager(){ return S.me && ['GL','代理GL','admin'].includes(S.me.role); }
+function renderEmp(){
+  const mgrBtn = isManager()? `<span class="mgr" onclick="S.view='admin';renderAdmin()">⇄ 管理</span>` : '<span></span>';
+  app().innerHTML = `
+    <div class="top"><b>${S.me.name} · ${SHIFT_LABEL[S.me.shift]||S.me.shift}</b>${mgrBtn}</div>
+    <div class="body" id="empbody"></div>
+    <div class="tab">
+      ${tabBtn('cal','📅','當月班表')}${tabBtn('reg','📝','下月登記')}${tabBtn('ot','🔔','加班通知')}${tabBtn('me','👤','我的')}
+    </div>`;
+  renderTab();
+}
+function tabBtn(k,ic,t){return `<div class="${S.tab===k?'on':''}" onclick="S.tab='${k}';renderTab()"><span class="ic">${ic}</span>${t}</div>`;}
+function renderTab(){
+  document.querySelectorAll('.tab div').forEach(d=>d.classList.remove('on'));
+  ({cal:tabCal,reg:tabReg,ot:tabOt,me:tabMe})[S.tab]();
+  // 重畫 tab 高亮
+  const idx={cal:0,reg:1,ot:2,me:3}[S.tab]; document.querySelectorAll('.tab div')[idx].classList.add('on');
+}
+
+// ── 分頁1：當月班表（日曆）──────────────────────────────
+async function tabCal(){
+  const b=document.getElementById('empbody');
+  b.innerHTML = `<div class="card"><div class="row" style="border:none;padding-top:0">
+    <span style="cursor:pointer" onclick="chgMonth(-1)">‹</span><b>${S.ym} 班表</b><span style="cursor:pointer" onclick="chgMonth(1)">›</span></div>
+    <div id="calwrap">載入中…</div></div>`;
+  const ck='sched_'+S.me.empId+'_'+S.ym;
+  let d=cache.get(ck);
+  if(!d){ const r=await api('getMySchedule',{ym:S.ym}); if(r.success){d=r.data;cache.set(ck,d,30);} }
+  if(!d){ document.getElementById('calwrap').textContent='讀取失敗'; return; }
+  document.getElementById('calwrap').innerHTML = calHtml(d.days);
+}
+function calHtml(days){
+  const first=new Date(days[0].date).getDay()||7; // 週一=1
+  let cells='';
+  for(let i=1;i<first;i++) cells+='<div></div>';
+  days.forEach(x=>{
+    const dn=Number(x.date.slice(8));
+    if(x.type==='work'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell work"><div class="dn">${dn}</div><div class="st">${x.site||''}</div><div class="mc">${m}</div></div>`;}
+    else if(x.type==='ot'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell ot"><div class="dn">${dn}</div><div class="st">加班 ${x.site||''}</div><div class="mc">${m}</div></div>`;}
+    else if(x.type==='leave'){cells+=`<div class="cell lv"><div class="dn">${dn}</div><div class="st">${(x.leave||'').replace('預排-','')}</div></div>`;}
+    else {cells+=`<div class="cell"><div class="dn">${dn}</div>${x.block?'<span class="xx">✕</span>':''}</div>`;}
+  });
+  return `<div class="cal"><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div><div class="dow">日</div>${cells}</div>
+  <div class="legend"><span><i style="background:var(--work)"></i>當班(機台)</span><span><i style="background:var(--ot)"></i>加班</span><span><i style="background:var(--lv)"></i>請假</span><span><b style="color:var(--danger)">✕</b>不可加班</span><span><i class="tag">派</i>派工</span></div>`;
+}
+function chgMonth(n){const[y,m]=S.ym.split('-').map(Number);const d=new Date(y,m-1+n,1);S.ym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;tabCal();}
+
+// ── 分頁2：下月登記（Stage1）— 點月曆選日期填報 ─────────
+let regDraft={};   // ds -> 假別；blk_ds -> true(不可加班)
+async function tabReg(){
+  const b=document.getElementById('empbody');
+  const nm=nextMonth();
+  const days=monthDays(nm);
+  const first=new Date(days[0]).getDay()||7;
+  let cells='';
+  for(let i=1;i<first;i++) cells+='<div></div>';
+  days.forEach(ds=>{
+    const dn=Number(ds.slice(8));
+    const isWork=groupOf(S.me.shift)===shiftType(ds);
+    if(regDraft[ds]) cells+=`<div class="cell pickL" onclick="pickDay('${ds}',true)"><div class="dn">${dn}</div><div class="st">${regDraft[ds].replace('預排-','')}</div></div>`;
+    else if(regDraft['blk_'+ds]) cells+=`<div class="cell" onclick="pickDay('${ds}',false)"><div class="dn">${dn}</div><span class="xx">✕</span></div>`;
+    else cells+=`<div class="cell ${isWork?'':''}" style="${isWork?'':'background:#f7f7f4'}" onclick="pickDay('${ds}',${isWork})"><div class="dn">${dn}</div>${isWork?'<div class="st" style="color:var(--mut);font-weight:400;font-size:11px">出班</div>':''}</div>`;
+  });
+  b.innerHTML=`<div class="card"><b>Stage1 登記 · ${nm}</b>
+    <div style="font-size:12px;color:var(--mut);margin:4px 0 8px">點出班日填假別；點非當班日標不可加班</div>
+    <div class="cal"><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div><div class="dow">日</div>${cells}</div>
+    <div class="legend"><span><i style="background:var(--lv)"></i>已填假別</span><span><b style="color:var(--danger)">✕</b>不可加班</span><span>淺底=非當班</span></div>
+    <div class="btn pri" style="margin-top:12px" onclick="submitReg('${nm}')">送出 Stage1 登記</div>
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">送出前系統會檢查連七，違規會擋。</div></div>`;
+}
+function pickDay(ds,isWork){
+  const lbl=ds.slice(5).replace('-','/');
+  if(isWork){
+    const opts=LEAVE_TYPES.map(l=>`<div class="opt" onclick="setLeave('${ds}','${l}')"><span>${l}</span>${regDraft[ds]===l?'<b style="color:var(--ok)">✓</b>':''}</div>`).join('');
+    openModal(`<h3>${lbl} 出班日 · 選假別</h3>${opts}
+      <div class="opt" onclick="setLeave('${ds}','')"><span style="color:var(--mut)">清除（全勤）</span></div>`);
+  }else{
+    const on=regDraft['blk_'+ds];
+    openModal(`<h3>${lbl} 非當班日</h3>
+      <div class="opt" onclick="setBlock('${ds}',${!on})"><span>✕ 標記不可加班</span><span class="sw ${on?'on':''}"></span></div>`);
+  }
+}
+function setLeave(ds,l){ if(l)regDraft[ds]=l; else delete regDraft[ds]; closeModal(); tabReg(); }
+function setBlock(ds,v){ if(v)regDraft['blk_'+ds]=true; else delete regDraft['blk_'+ds]; closeModal(); tabReg(); }
+async function submitReg(nm){
+  const items=[];
+  Object.keys(regDraft).forEach(k=>{
+    if(k.startsWith('blk_')){ if(regDraft[k]) items.push({date:k.slice(4),type:'block'}); }
+    else if(regDraft[k]) items.push({date:k,type:'leave',leave_type:regDraft[k]});
+  });
+  if(!items.length){toast('尚未選擇');return;}
+  toast('已送出（'+items.length+'筆）'); // 樂觀更新
+  const r=await api('submitRequest',{ym:nm,items});
+  if(r.success){regDraft={};} else toast('送出失敗：'+r.error);
+}
+function nextMonth(){const[y,m]=S.ym.split('-').map(Number);const d=new Date(y,m,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+
+// ── 分頁3：加班通知 ──────────────────────────────────────
+function tabOt(){
+  document.getElementById('empbody').innerHTML=`<div class="card"><b>加班通知</b>
+    <div class="warn">7/05（六）P8 加班邀請 · 剩 41:20</div>
+    <div class="g2"><div class="btn" style="background:var(--okbg);color:var(--ok);border-color:#5dcaa5" onclick="otReply(true)">接受</div>
+    <div class="btn dg" onclick="otReply(false)">拒絕</div></div>
+    <div class="lbl">接受→選類別</div>
+    <select class="in"><option>加班-報補休</option><option>加班-報加班費</option></select>
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">進系統時自動檢查未讀加班通知。</div></div>`;
+}
+function otReply(ok){ toast(ok?'已接受':'已拒絕，將詢問是否參加第二輪'); }
+
+// ── 分頁4：我的 ─────────────────────────────────────────
+function tabMe(){
+  const sk=(S.me.skills||[]).join('、')||'—';
+  document.getElementById('empbody').innerHTML=`<div class="card">
+    <div class="row"><span style="color:var(--mut)">工號 / 班別 / Site</span><span>${S.me.empId} · ${S.me.shift} · ${S.me.site}</span></div>
+    <div class="row"><span style="color:var(--mut)">我的技能</span><span>${sk}</span></div>
+    <div class="row"><span style="color:var(--mut)">角色</span><span>${S.me.role}</span></div>
+    <div class="btn" style="margin-top:10px">通知設定</div>
+    <div class="btn dg" style="margin-top:8px" onclick="logout()">登出</div>
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">工時數據未提供，暫不顯示週/月/季工時。約束以「不可連七＋變形工時」為主。</div></div>`;
+}
+
+// ── 管理頁（人機表 + 切回員工）─────────────────────────
+async function renderAdmin(){
+  app().innerHTML=`<div class="top"><b>管理 · ${S.me.shift} · ${S.ym}</b>
+    <span class="mgr" onclick="S.view='emp';renderEmp()">⇄ 員工頁</span></div>
+    <div class="body" id="abody">載入中…</div>`;
+  const r=await api('getMachineTable',{ym:S.ym,shift:S.me.shift});
+  const g=r.success?r.data:{days:[],rows:[]};
+  document.getElementById('abody').innerHTML=`
+    <div class="card">
+      <div class="seg"><div onclick="S.view='emp';renderEmp()">自己</div><div class="on">總表（人機表）</div></div>
+      <div class="gw">${gridHtml(g)}</div>
+      <div class="warn">提示：P7空機 / 剩餘人力 / FIB未排（鎖定前檢查）</div>
+      <div class="grp">整月</div>
+      <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="toast('整月清除')">整月清除</div></div>
+      <div class="grp">輸出</div>
+      <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（前端 canvas，待接）')">截圖存圖</div></div>
+      <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
+    </div>
+    <div class="card"><b>管理設定</b>
+      ${[['建立月份','admCycle'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['角色設定','admRole'],['員工技能清單','admSkill'],['加班統計','admOt']]
+        .map(([t,fn])=>`<div class="row" onclick="${fn}()"><span>${t}</span><span style="color:var(--mut)">›</span></div>`).join('')}
+    </div>`;
+}
+
+// ── 管理子畫面（共用殼）────────────────────────────────────
+function admShell(title,inner){
+  app().innerHTML=`<div class="top"><b>‹ ${title}</b><span class="mgr" onclick="renderAdmin()">返回</span></div>
+    <div class="body">${inner}</div>`;
+  document.querySelector('.top b').style.cursor='pointer';
+  document.querySelector('.top b').onclick=renderAdmin;
+}
+
+// 建立月份
+function admCycle(){
+  const nm=nextMonth();
+  admShell('建立月份',`<div class="card"><b>建立 ${nm} 基礎班表</b>
+    <div class="lbl">自動帶入 BBAA 四班日曆（DA/DB/NA/NB）</div>
+    <div class="grp">① 國假日期（出班）</div>
+    <input class="in" placeholder="例 ${nm}-03,${nm}-15（逗號分隔）" id="nh">
+    <div class="grp">② 變形工時</div>
+    <div class="row"><span>B 組</span><input class="in" style="width:120px" placeholder="最多天數" value="2"></div>
+    <div class="grp">③ Stage 截止時間</div>
+    ${['Stage1','Stage2','Stage3'].map(s=>`<div class="row"><span>${s}</span><input class="in" style="width:160px" type="date"></div>`).join('')}
+    <div class="grp">④ AUTO 機台配對方案</div>
+    <select class="in"><option>P2 方案1</option><option>P2 方案2</option></select>
+    <div class="btn pri" style="margin-top:12px" onclick="toast('已建立 ${nm} 並開放 Stage1，舊月份已清理');renderAdmin()">建立月份並開放 Stage1</div></div>`);
+}
+
+// 機台狀態排程
+const MACH_STATUS=['ACTIVE','AUTO','空機','OFF','CRYO','DOWN','TEST'];
+function admMach(){
+  const tools=[['BXTM01','P2','ACTIVE'],['BXTM02','P2','AUTO'],['LXTM04','P8','DOWN'],['KXTM10','P7','ACTIVE']];
+  admShell('機台狀態排程',`<div class="card">
+    <div class="row"><b>機台狀態 · ${S.ym}</b><span class="pill" onclick="toast('新增機台')">＋ 新增機台</span></div>
+    ${tools.map(([id,site,st])=>`<div class="row" onclick="machModal('${id}','${st}')"><span style="font-family:ui-monospace,monospace">${id} <span style="color:var(--mut)">${site}</span></span><span class="pill">${st} ›</span></div>`).join('')}
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">點機台設定單日/區間狀態。</div></div>`);
+}
+function machModal(id,cur){
+  openModal(`<h3>${id} · 設定狀態</h3>
+    ${MACH_STATUS.map(s=>`<div class="opt" onclick="toast('${id} → ${s}');closeModal()"><span>${s}</span>${s===cur?'<b style="color:var(--ok)">✓</b>':''}</div>`).join('')}
+    <div class="row" style="margin-top:8px"><input class="in" type="date" style="width:46%"><input class="in" type="date" style="width:46%"></div>`);
+}
+
+// 雙棲人員設定（清單 + 下月出勤月曆）
+function admFib(){
+  const fib=[['凌曉吟','150959','DA·P2'],['李涵如','122298','DB·P7']];
+  admShell('雙棲人員設定',`<div class="card"><b>雙棲清單 · 設定後才進人力池</b>
+    ${fib.map(([n,id,m])=>`<div class="row" onclick="fibCal('${n}')"><span>${n} <span style="color:var(--mut)">${id}·${m}</span></span><span class="pill">出勤登記 ›</span></div>`).join('')}</div>`);
+}
+function fibCal(name){
+  const nm=nextMonth(), days=monthDays(nm), first=new Date(days[0]).getDay()||7;
+  let cells=''; for(let i=1;i<first;i++)cells+='<div></div>';
+  days.forEach(ds=>{const dn=Number(ds.slice(8));cells+=`<div class="cell" onclick="toast('${ds} 切換出勤')"><div class="dn">${dn}</div></div>`;});
+  admShell('雙棲出勤 · '+name,`<div class="card"><b>${name} · ${nm} 出勤登記</b>
+    <div style="font-size:12px;color:var(--mut);margin:4px 0 8px">點日期切換：自班出勤／對班支援／缺勤</div>
+    <div class="cal"><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div><div class="dow">日</div>${cells}</div>
+    <div class="btn pri" style="margin-top:12px" onclick="toast('已確認，加入人力池');admFib()">確認出勤 → 加入人力池</div></div>`);
+}
+
+// 角色設定
+const ROLES=['employee','GL','代理GL','admin'];
+function admRole(){
+  const ppl=[['徐淨','108957','NA','GL'],['黃國化','095396','DA','代理GL'],['李哲安','125354','NB','admin']];
+  admShell('角色設定',`<div class="card"><b>角色設定（僅 Admin）</b>
+    ${ppl.map(([n,id,sf,r])=>`<div class="row"><span>${n} <span style="color:var(--mut)">${id}·${sf}</span></span>
+      <select class="in" style="width:130px" onchange="toast('${n} → '+this.value)">${ROLES.map(x=>`<option ${x===r?'selected':''}>${x}</option>`).join('')}</select></div>`).join('')}</div>`);
+}
+
+// 員工技能清單（只顯示有的；編輯跳逐行開關）
+const SK_MACHINE=['nonCS','CS','ARM','AUTO','REMOTE','FIB','雙棲'];
+const SK_DISP=['GL派工','代理GL派工','代理派工'];
+function admSkill(){
+  const ppl=[['黃國化','095396','DA·P6',['nonCS','REMOTE','GL派工']],['許志維','152459','NA·P8',['nonCS','CS','ARM','AUTO']]];
+  admShell('員工技能清單',`<div class="card"><b>技能管控</b>
+    ${ppl.map(([n,id,m,sk])=>`<div class="row" onclick='skillModal(${JSON.stringify(n)},${JSON.stringify(sk)})'>
+      <span>${n} <span style="color:var(--mut)">${id}·${m}</span><div style="margin-top:4px">${sk.map(s=>`<span class="tag" style="margin-right:4px">${s}</span>`).join('')}</div></span>
+      <span class="pill">編輯 ›</span></div>`).join('')}
+    <div style="font-size:12px;color:var(--mut);margin-top:8px">平時只列有的技能，點編輯展開全部開關。</div></div>`);
+}
+function skillModal(name,have){
+  const sw=(s)=>`<div class="opt"><span>${s}</span><span class="sw ${have.includes(s)?'on':''}" onclick="this.classList.toggle('on')"></span></div>`;
+  openModal(`<h3>編輯技能 · ${name}</h3>
+    <div class="grp" style="margin-top:0">機台技能</div>${SK_MACHINE.map(sw).join('')}
+    <div class="grp">派工技能（GL派工＞代理GL派工＞代理派工）</div>${SK_DISP.map(sw).join('')}
+    <div class="btn pri" style="margin-top:12px" onclick="toast('已儲存技能');closeModal()">儲存</div>`);
+}
+
+// 加班統計（簡化：完全回覆 vs 未回覆完）
+function admOt(){
+  const wait=[['曹子茵','剩 6:10'],['梁庭銓','剩 12:30'],['楊子玄','剩 20:00']];
+  admShell('加班統計',`<div class="card"><b>加班統計 · ${S.me.shift} · Stage2</b>
+    <div class="g2" style="margin-top:10px">
+      <div class="card" style="text-align:center;margin:0"><div style="font-size:22px;font-weight:600;color:var(--ok)">23</div><div style="font-size:12px;color:var(--mut)">已完全回覆</div></div>
+      <div class="card" style="text-align:center;margin:0"><div style="font-size:22px;font-weight:600;color:#633806">${wait.length}</div><div style="font-size:12px;color:var(--mut)">尚未回覆完</div></div></div>
+    <div class="grp">尚未回覆完的人</div>
+    ${wait.map(([n,t])=>`<div class="row"><span>${n} <span style="color:var(--mut)">${t}</span></span><span class="pill no">未回覆</span></div>`).join('')}
+    <div class="g2" style="margin-top:12px"><div class="btn" onclick="toast('已發催促')">催促提醒</div><div class="btn pri" onclick="toast('強制推進 Stage3')">強制推進</div></div></div>`);
+}
+function gridHtml(g){
+  if(!g.rows.length) return '<div style="padding:10px;color:var(--mut)">尚無資料（需先建立月份/排班）</div>';
+  let h='<table class="mt"><tr><th>機台\\日</th>'+g.days.map(d=>`<th>${Number(d.slice(8))}</th>`).join('')+'</tr>';
+  g.rows.forEach(r=>{
+    const disp=String(r.rowKey).charAt(0)==='@';
+    h+=`<tr><td class="rk">${r.rowKey}</td>`+r.cells.map(c=>{
+      let cls=disp?'disp':''; if(c==='空機')cls='empty'; if(['停機','DOWN','CRYO','OFF','TEST'].includes(c))cls='stp';
+      return `<td class="${cls}">${c||''}</td>`;
+    }).join('')+'</tr>';
+  });
+  return h+'</table>';
+}
+async function runAuto(){ toast('自動排班中…'); const r=await api('autoAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('草稿完成');renderAdmin();}else toast('排班：'+r.error); }
+async function doExport(){ toast('產生 Excel…'); const r=await api('exportExcel',{ym:S.ym,shift:S.me.shift}); if(r.success&&r.data.url){window.open(r.data.url,'_blank');toast('已產生，開始下載');}else toast(r.success?'demo：已產生 EXPORT 分頁':'匯出：'+r.error); }
+
+// ============================================================
+// Mock 資料（API_BASE 為空時使用，純前端 demo）
+// ============================================================
+function mockApi(action,data){
+  return new Promise(res=>setTimeout(()=>res(mock(action,data)),120));
+}
+function mock(action,data){
+  const EMP={'095396':{empId:'095396',name:'黃國化',shift:'DA',site:'P6',role:'GL',skills:['nonCS','REMOTE','GL派工']},
+             '152459':{empId:'152459',name:'許志維',shift:'NA',site:'P8',role:'employee',skills:['nonCS','CS','ARM','AUTO']}};
+  if(action==='login'){const e=EMP[data.empId];if(e&&data.pwd===data.empId.slice(-4))return{success:true,data:{token:'mock',employee:e}};return{success:false,error:'帳密錯誤(demo:095396/5396)'};}
+  if(action==='getMySchedule'){
+    const days=monthDays(data.ym).map(ds=>{
+      const work=groupOf(S.me.shift)===shiftType(ds);
+      if(!work) return {date:ds,type:'off'};
+      const dn=Number(ds.slice(8));
+      if(dn%7===5) return {date:ds,type:'leave',leave:'預排-特休'};
+      if(dn%5===0) return {date:ds,type:'ot',site:'P8',assign:{kind:'machine',toolId:'LXTM04'}};
+      return {date:ds,type:'work',site:S.me.site,assign:{kind:dn%3===0?'dispatch':'machine',toolId:'BXTM0'+(dn%8+1)}};
+    });
+    return {success:true,data:{empId:S.me.empId,name:S.me.name,shift:S.me.shift,days}};
+  }
+  if(action==='getMachineTable'){
+    const days=monthDays(data.ym).filter(ds=>groupOf(data.shift)===shiftType(ds)).slice(0,6);
+    const rows=[['@P2','楊于慶','','郭紫妍','楊于慶','楊于慶','楊于慶'],['@P6','李欽翔','李欽翔','郭紫妍','李欽翔','李欽翔','李欽翔'],
+      ['@P8','徐淨','徐淨','洪珮鈴','徐淨','徐淨','徐淨'],['BXTM01','吳冠宇','梁庭銓','空機','楊子玄','楊子玄','梁'],
+      ['BXTM02','曹子茵','曹子茵','曹子茵','曹子茵','梁庭銓','曹'],['LXTM04','洪珮鈴','洪珮鈴','DOWN','郭存榮','郭存榮','郭']]
+      .map(r=>({rowKey:r[0],cells:r.slice(1,days.length+1)}));
+    return {success:true,data:{days,rows}};
+  }
+  if(action==='submitRequest'||action==='autoAssign') return {success:true,data:{}};
+  return {success:true,data:{}};
+}
+
+boot();
+</script>
+</body>
+</html>
