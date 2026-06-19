@@ -126,13 +126,10 @@ const app = ()=>document.getElementById('app');
 function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('ov').classList.add('show');}
 function closeModal(){document.getElementById('ov').classList.remove('show');}
 
-async function boot(){
-  // 沒有有效 token 一律回登入頁
-  if(!token()){ renderLogin(); return; }
-  // 有 token → 向後端驗證並刷新角色；驗不過就回登入
-  let r=null; try{ r=await api('getMe'); }catch(e){}
-  if(r&&r.success&&r.data&&r.data.empId){ S.me=r.data; cache.set('me',S.me,60); S.view='emp'; renderEmp(); }
-  else { LS.clear(); S.me=null; renderLogin(); }
+function boot(){
+  // 每次開啟一律從登入頁進入（登入時會抓最新角色，不依賴舊快取）
+  LS.del('token'); S.me=null; cache.del('me');
+  renderLogin();
 }
 
 // ── 登入 ─────────────────────────────────────────────────
@@ -312,7 +309,7 @@ async function renderAdmin(){
       <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
     </div>
     <div class="card"><b>管理設定</b>
-      ${[['建立月份','admCycle'],['人力清單','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['角色設定','admRole'],['員工技能清單','admSkill'],['加班統計','admOt']]
+      ${[['建立月份','admCycle'],['人力清單（角色/技能/產假）','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['加班統計','admOt']]
         .map(([t,fn])=>`<div class="row" onclick="${fn}()"><span>${t}</span><span style="color:var(--mut)">›</span></div>`).join('')}
     </div>`;
 }
@@ -430,28 +427,31 @@ function empRows(ms){
 function filterEmp(){const q=document.getElementById('empq').value.trim();const ms=_static.members.filter(m=>m.empId.includes(q)||m.name.includes(q));document.getElementById('emplist').innerHTML=empRows(ms);}
 let editingEmp=null;
 function empModal(m){
-  m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee',skills:[]};
+  m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee',skills:['nonCS']};
   editingEmp=m;
-  const mat=(m.skills||[]).includes('產假');
+  const has=s=>(m.skills||[]).includes(s);
+  const sw=s=>`<div class="opt"><span>${s}</span><span class="sw ${has(s)?'on':''}" data-sk="${s}" onclick="this.classList.toggle('on')"></span></div>`;
   openModal(`<h3>${m.empId?'編輯':'新增'}員工</h3>
     <div class="lbl">工號</div><input class="in" id="m_id" value="${m.empId}" ${m.empId?'disabled':''}>
     <div class="lbl">姓名</div><input class="in" id="m_name" value="${m.name||''}">
     <div class="lbl">班別</div><select class="in" id="m_shift">${['DA','DB','NA','NB'].map(s=>`<option ${m.shift===s?'selected':''}>${s}</option>`).join('')}</select>
     <div class="lbl">Site</div><select class="in" id="m_site">${['P2','P6','P7','P8'].map(s=>`<option ${m.site===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="lbl">角色</div><select class="in" id="m_role">${ROLES.map(r=>`<option ${m.role===r?'selected':''}>${r}</option>`).join('')}</select>
     <div class="lbl">密碼（留空＝工號末4碼）</div><input class="in" id="m_pwd" placeholder="${(m.empId||'').slice(-4)}">
-    <div class="opt" style="margin-top:10px"><span>產假中（不計人力，整月顯示預排產假）</span><span class="sw ${mat?'on':''}" id="m_mat" onclick="this.classList.toggle('on')"></span></div>
+    <div class="grp">機台技能</div>${SK_MACHINE.map(sw).join('')}
+    <div class="grp">派工技能（GL派工＞代理GL派工＞代理派工）</div>${SK_DISP.map(sw).join('')}
+    <div class="opt" style="margin-top:6px"><span style="color:#993556">產假中（不計人力，整月顯示預排產假）</span><span class="sw ${has('產假')?'on':''}" id="m_mat" onclick="this.classList.toggle('on')"></span></div>
     <div class="btn pri" style="margin-top:12px" onclick="saveEmp()">儲存</div>
     ${m.empId?`<div class="btn dg" style="margin-top:8px" onclick="delEmp('${m.empId}')">刪除員工</div>`:''}`);
 }
 async function saveEmp(){
   const d={empId:document.getElementById('m_id').value.trim(),name:document.getElementById('m_name').value.trim(),
-    shift:document.getElementById('m_shift').value,site:document.getElementById('m_site').value};
+    shift:document.getElementById('m_shift').value,site:document.getElementById('m_site').value,role:document.getElementById('m_role').value};
   const pwd=document.getElementById('m_pwd').value.trim(); if(pwd)d.pwd=pwd;
   if(!d.empId||!d.name){toast('工號/姓名必填');return;}
-  // 產假：在既有技能上加/移除「產假」標記
-  const mat=document.getElementById('m_mat').classList.contains('on');
-  let sk=((editingEmp&&editingEmp.skills)||['nonCS']).filter(s=>s!=='產假');
-  if(mat)sk.push('產假'); d.skills=sk;
+  const sk=[...document.querySelectorAll('#sheet .sw[data-sk]')].filter(x=>x.classList.contains('on')).map(x=>x.getAttribute('data-sk'));
+  if(document.getElementById('m_mat').classList.contains('on'))sk.push('產假');
+  d.skills=sk.length?sk:['nonCS'];
   closeModal();toast('儲存中…');const r=await api('upsertEmployee',d);
   if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);
 }
