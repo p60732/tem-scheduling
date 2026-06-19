@@ -126,8 +126,10 @@ const app = ()=>document.getElementById('app');
 function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('ov').classList.add('show');}
 function closeModal(){document.getElementById('ov').classList.remove('show');}
 
-function boot(){
+async function boot(){
   S.me = cache.get('me');
+  // 進系統時刷新角色（避免管理員把你升級/降級後仍用舊快取）
+  if(token()){ try{const r=await api('getMe'); if(r.success&&r.data&&r.data.empId){S.me=r.data;cache.set('me',S.me,60);}}catch(e){} }
   if(!S.me){ renderLogin(); return; }
   S.view = 'emp'; renderEmp();
 }
@@ -209,6 +211,17 @@ let regDraft={};   // ds -> 假別；blk_ds -> true(不可加班)
 async function tabReg(){
   const b=document.getElementById('empbody');
   const nm=nextMonth();
+  // 檢查下月是否已開放填報（管理者確認國假/變形工時後才開放 Stage1）
+  b.innerHTML='<div class="card">檢查開放狀態…</div>';
+  const cy=await api('getCycle',{ym:nm});
+  const mine=cy.success?(cy.data.cycles||[]).find(c=>c.shift===S.me.shift):null;
+  if(!mine || mine.stage<1){
+    b.innerHTML=`<div class="card" style="text-align:center;color:var(--mut)">
+      <div style="font-size:40px">🗓️</div>
+      <div style="font-size:15px;margin:8px 0;color:var(--ink)">${nm} 尚未開放填報</div>
+      <div style="font-size:13px">管理者確認國假 / 變形工時後才會開放，請稍候。</div></div>`;
+    return;
+  }
   const days=monthDays(nm);
   const first=new Date(days[0]).getDay()||7;
   let cells='';
@@ -330,7 +343,8 @@ function renderCycle(){
     ${['s1','s2','s3'].map((s,i)=>`<div class="row"><span>Stage${i+1}</span><input class="in" id="${s}" style="width:170px" type="date"></div>`).join('')}
     <div class="grp">③ AUTO 機台配對組合</div>
     <div class="row"><span style="color:var(--mut);font-size:13px">設定哪些 AUTO 機台兩兩一組</span><span class="pill" onclick="autoPairEditor()">編輯配對 ›</span></div>
-    <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份並開放 Stage1</div></div>`);
+    <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份（草稿）</div>
+    <div style="font-size:12px;color:var(--mut);margin-top:6px">建立後會再讓你確認國假/變形工時，確認無誤才開放員工填報。</div></div>`);
 }
 function cycleCalHtml(nm){
   const days=monthDays(nm), first=new Date(days[0]).getDay()||7;
@@ -363,7 +377,23 @@ async function saveCycle(){
     flex:Object.keys(cycleDraft.fx).length?[{group:'B',dates:Object.keys(cycleDraft.fx),max_days:Number(document.getElementById('fxmax').value||2),desc:'變形工時'}]:[],
     deadlines:{s1:document.getElementById('s1').value,s2:document.getElementById('s2').value,s3:document.getElementById('s3').value}};
   toast('建立中…'); const r=await api('createCycle',data);
-  if(r.success){toast('已建立 '+nm+'，舊月份已清理');renderAdmin();}else toast('建立：'+r.error);
+  if(r.success){cycleConfirmScreen(nm,data);}else toast('建立：'+r.error);
+}
+// 確認國假/變形工時 → 才開放員工填報（Stage1）
+function cycleConfirmScreen(nm,data){
+  admShell('確認並開放填報',`<div class="card"><b>${nm} 已建立（草稿）</b>
+    <div style="font-size:13px;color:var(--mut);margin:6px 0 10px">請確認以下設定無誤，確認後才會送出給全體員工填下個月。</div>
+    <div class="grp">國假日（${data.national_holidays.length}）</div>
+    <div>${data.national_holidays.length?data.national_holidays.map(d=>`<span class="tag" style="margin:2px">${d.slice(5)}</span>`).join(''):'<span style="color:var(--mut)">無</span>'}</div>
+    <div class="grp">變形工時日（${(data.flex[0]?data.flex[0].dates.length:0)}，最多 ${data.flex[0]?data.flex[0].max_days:'-'} 天）</div>
+    <div>${data.flex[0]?data.flex[0].dates.map(d=>`<span class="tag" style="margin:2px;background:#faeeda;color:#633806">${d.slice(5)}</span>`).join(''):'<span style="color:var(--mut)">無</span>'}</div>
+    <div class="btn pri" style="margin-top:14px" onclick="openStage1('${nm}')">✓ 確認無誤，開放員工填報</div>
+    <div class="btn" style="margin-top:8px" onclick="renderCycle()">返回修改</div>
+    <div style="font-size:12px;color:var(--mut);margin-top:6px">未開放前，員工的「下月登記」會顯示「尚未開放」。</div></div>`);
+}
+async function openStage1(nm){
+  toast('開放中…'); const r=await api('openStage1',{ym:nm,shift:S.me.shift});
+  if(r.success){toast(nm+' 已開放填報（'+r.data.shifts+' 班）');renderAdmin();}else toast('開放：'+r.error);
 }
 
 // 取得靜態資料（員工/機台），快取
