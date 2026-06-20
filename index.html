@@ -152,7 +152,7 @@ async function doLogin(){
   if(!r.success){ toast(r.error||'登入失敗'); return; }
   LS.set('token',r.data.token);
   S.me = r.data.employee; cache.set('me',S.me,60*24);
-  boot();
+  S.view='emp'; S.tab='cal'; renderEmp();   // 登入後直接進系統（不可呼叫 boot，會清登入）
 }
 function logout(){ LS.clear(); S.me=null; renderLogin(); }
 
