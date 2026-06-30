@@ -360,8 +360,10 @@ function admCycle(){
   cycleDraft={nh:{},fx:{},pickMode:'nh'};
   renderCycle();
 }
+function workDayAhead(n){ const d=new Date(); let c=0; while(c<n){ d.setDate(d.getDate()+1); const w=d.getDay(); if(w!==0&&w!==6)c++; } const z=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
 function renderCycle(){
   const nm=nextMonth();
+  if(!cycleDraft.dl) cycleDraft.dl={s1:workDayAhead(6),s2:workDayAhead(12),s3:workDayAhead(18)};
   const b=document.getElementById('abody'); if(!b){ adminTab='cycle'; renderAdmin(); return; }
   b.innerHTML=(`<div class="card"><b>建立 ${nm} 基礎班表</b>
     <div class="lbl">自動帶入 BBAA 四班日曆（DA/DB/NA/NB）</div>
@@ -370,14 +372,14 @@ function renderCycle(){
     <div id="cycCal">${cycleCalHtml(nm)}</div>
     <div class="legend"><span><i style="background:#e24b4a;width:12px;height:12px;border-radius:3px;display:inline-block"></i> 國假(${Object.keys(cycleDraft.nh).length})</span><span><i style="background:#ef9f27;width:12px;height:12px;border-radius:3px;display:inline-block"></i> 變形工時(${Object.keys(cycleDraft.fx).length})</span></div>
     <div class="row" style="margin-top:6px"><span>變形工時：最多加班天數</span><input class="in" id="fxmax" style="width:90px" value="2"></div>
-    <div class="grp">② Stage 截止時間</div>
-    ${['s1','s2','s3'].map((s,i)=>`<div class="row"><span>Stage${i+1}</span><input class="in" id="${s}" style="width:170px" type="date"></div>`).join('')}
+    <div class="grp">② Stage 截止時間（已預設，每階段約 6 個上班日）</div>
+    ${['s1','s2','s3'].map((s,i)=>`<div class="row"><span>Stage${i+1}</span><input class="in" id="${s}" style="width:170px" type="date" value="${cycleDraft.dl[s]}" onchange="cycleDraft.dl['${s}']=this.value"></div>`).join('')}
     <div class="grp">③ AUTO 機台配對組合</div>
     <div class="row"><span style="color:var(--mut);font-size:13px">設定哪些 AUTO 機台兩兩一組</span><span class="pill" onclick="autoPairEditor()">編輯配對 ›</span></div>
     <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份（草稿）</div>
     <div style="font-size:12px;color:var(--mut);margin-top:6px">建立後會再讓你確認國假/變形工時，確認無誤才開放員工填報。</div></div>`);
 }
-function resetCycleDraft(){ cycleDraft={nh:{},fx:{},pickMode:'nh'}; }
+function resetCycleDraft(){ cycleDraft={nh:{},fx:{},pickMode:'nh',dl:null}; }
 function cycleCalHtml(nm){
   const days=monthDays(nm), first=new Date(days[0]).getDay()||7;
   let c=''; for(let i=1;i<first;i++)c+='<div></div>';
@@ -391,12 +393,19 @@ function cycPick(ds){
 }
 async function autoPairEditor(){
   const d=await loadStatic();
-  const autos=d.tools.filter(t=>t.type==='auto'||t.status==='AUTO');
-  openModal(`<h3>AUTO 機台配對組合</h3>
-    <div style="font-size:12px;color:var(--mut);margin-bottom:8px">同一「配對組」名稱的機台會被視為一組（一人顧）。</div>
-    ${autos.map(t=>`<div class="row"><span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut)">${t.site}</span></span>
-      <input class="in" style="width:120px" value="${t.auto_pair||''}" placeholder="組名 如P2_1A" onchange="savePair('${t.tool_id}',this.value)"></div>`).join('')}
-    <div class="btn pri" style="margin-top:10px" onclick="closeModal()">完成</div>`);
+  const bySite={}; d.tools.forEach(t=>{(bySite[t.site]=bySite[t.site]||[]).push(t);});
+  let html='<h3>AUTO 機台配對組合</h3><div style="font-size:12px;color:var(--mut);margin-bottom:8px">列出全部機台。為 AUTO 機台填**相同的組編號**即成一組（一人顧兩台）；手動機台不需配對。</div>';
+  ['P2','P6','P7','P8'].forEach(site=>{
+    const ts=(bySite[site]||[]); if(!ts.length)return;
+    html+=`<div class="grp">${site}</div>`;
+    ts.forEach(t=>{
+      const isAuto=t.type==='auto'||t.status==='AUTO';
+      html+=`<div class="row"><span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:${isAuto?'#0c447c':'var(--mut)'};font-family:var(--font-sans);font-size:12px">${isAuto?'AUTO':'手動'}</span></span>`+
+        (isAuto?`<input class="in" style="width:110px" value="${t.auto_pair||''}" placeholder="組編號" onchange="savePair('${t.tool_id}',this.value)">`:`<span style="color:var(--mut);font-size:12px">—</span>`)+`</div>`;
+    });
+  });
+  html+='<div class="btn pri" style="margin-top:10px" onclick="closeModal()">完成</div>';
+  openModal(html);
 }
 async function savePair(id,group){
   const t=(_static.tools||[]).find(x=>x.tool_id===id)||{};
