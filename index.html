@@ -299,31 +299,52 @@ function tabMe(){
     <div style="font-size:12px;color:var(--mut);margin-top:8px">工時數據未提供，暫不顯示週/月/季工時。約束以「不可連七＋變形工時」為主。</div></div>`;
 }
 
-// ── 管理頁（人機表 + 切回員工）─────────────────────────
-async function renderAdmin(){
-  app().innerHTML=`<div class="top"><b>管理 · ${S.me.shift} · ${S.ym}</b>
+// ── 管理頁（分頁：人機表 / 建立月份 / 管理設定）──────────
+let adminTab='mt', adminShift='';
+function renderAdmin(){
+  if(!adminShift) adminShift=S.me.shift;
+  app().innerHTML=`<div class="top"><b>管理 · ${S.ym}</b>
     <span class="mgr" onclick="S.view='emp';renderEmp()">⇄ 員工頁</span></div>
-    <div class="body" id="abody">載入中…</div>`;
-  await loadStatic();
-  const r=await api('getMachineTable',{ym:S.ym,shift:S.me.shift});
-  const g=r.success?r.data:{days:[],rows:[]};
-  document.getElementById('abody').innerHTML=`
-    <div class="card">
-      <div class="seg"><div onclick="S.view='emp';renderEmp()">自己</div><div class="on">總表（人機表）</div></div>
-      <div class="gw">${gridHtml(g)}</div>
-      <div class="warn">提示：P7空機 / 剩餘人力 / FIB未排（鎖定前檢查）</div>
-      <div class="grp">整月</div>
-      <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="clearMonth()">整月清除</div></div>
-      <div class="grp">輸出</div>
-      <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（前端 canvas，待接）')">截圖存圖</div></div>
-      <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
-      <div class="btn dg" style="margin-top:8px" onclick="delMonth()">刪除此月份（${S.ym}）</div>
-    </div>
-    <div class="card"><b>管理設定</b>
-      ${[['建立月份','admCycle'],['人力清單（角色/技能/產假）','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['加班統計','admOt']]
-        .map(([t,fn])=>`<div class="row" onclick="${fn}()"><span>${t}</span><span style="color:var(--mut)">›</span></div>`).join('')}
-    </div>`;
+    <div class="body" id="abody">載入中…</div>
+    <div class="tab">${admTabBtn('mt','📋','人機表')}${admTabBtn('cycle','🗓️','建立月份')}${admTabBtn('settings','⚙️','管理設定')}</div>`;
+  renderAdminTab();
 }
+function admTabBtn(k,ic,t){return `<div class="${adminTab===k?'on':''}" onclick="adminTab='${k}';renderAdminTab()"><span class="ic">${ic}</span>${t}</div>`;}
+function renderAdminTab(){
+  const idx={mt:0,cycle:1,settings:2}[adminTab];
+  document.querySelectorAll('#app .tab div').forEach((d,i)=>d.classList.toggle('on',i===idx));
+  ({mt:admMT,cycle:admCycleTab,settings:admSettings})[adminTab]();
+}
+const STAGE_LABEL={0:'草稿（未開放）',1:'Stage1 填假中',2:'Stage2 加班',3:'Stage3 加班',4:'已排班'};
+async function admMT(){
+  const b=document.getElementById('abody'); b.innerHTML='<div class="card">載入中…</div>';
+  await loadStatic();
+  const cyc=await api('getCycle',{ym:S.ym});
+  const cy=cyc.success?(cyc.data.cycles||[]).find(c=>c.shift===adminShift):null;
+  const stage=cy?((STAGE_LABEL[cy.stage]||('Stage'+cy.stage))+(cy.locked?' · 已鎖定':'')):'尚未建立';
+  const r=await api('getMachineTable',{ym:S.ym,shift:adminShift});
+  const g=r.success?r.data:{days:[],rows:[]};
+  b.innerHTML=`<div class="card">
+    <div class="row" style="border:none;padding:0 0 8px">
+      <select class="in" style="width:120px" onchange="adminShift=this.value;admMT()">${['DA','DB','NA','NB'].map(s=>`<option ${adminShift===s?'selected':''}>${s} 班</option>`).join('')}</select>
+      <span class="tag" style="background:#eeedfe;color:#26215c;font-size:12px">階段：${stage}</span>
+    </div>
+    <div class="gw">${gridHtml(g)}</div>
+    <div class="warn">提示：P7空機 / 剩餘人力 / FIB未排（鎖定前檢查）</div>
+    <div class="grp">整月（${adminShift} 班）</div>
+    <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="clearMonth()">整月清除</div></div>
+    <div class="grp">輸出</div>
+    <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（待接）')">截圖存圖</div></div>
+    <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
+    <div class="btn dg" style="margin-top:8px" onclick="delMonth()">刪除此月份（${S.ym}）</div>
+  </div>`;
+}
+function admSettings(){
+  document.getElementById('abody').innerHTML=`<div class="card"><b>管理設定</b>
+    ${[['人力清單（角色/技能/產假）','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['加班統計','admOt']]
+      .map(([t,fn])=>`<div class="row" onclick="${fn}()"><span>${t}</span><span style="color:var(--mut)">›</span></div>`).join('')}</div>`;
+}
+function admCycleTab(){ renderCycle(); }
 
 // ── 管理子畫面（共用殼）────────────────────────────────────
 function admShell(title,inner){
@@ -341,7 +362,8 @@ function admCycle(){
 }
 function renderCycle(){
   const nm=nextMonth();
-  admShell('建立月份',`<div class="card"><b>建立 ${nm} 基礎班表</b>
+  const b=document.getElementById('abody'); if(!b){ adminTab='cycle'; renderAdmin(); return; }
+  b.innerHTML=(`<div class="card"><b>建立 ${nm} 基礎班表</b>
     <div class="lbl">自動帶入 BBAA 四班日曆（DA/DB/NA/NB）</div>
     <div class="grp">① 月曆點選：國假日 / 變形工時日</div>
     <div class="seg" id="pmseg"><div class="${cycleDraft.pickMode==='nh'?'on':''}" onclick="cycleDraft.pickMode='nh';renderCycle()">國假日</div><div class="${cycleDraft.pickMode==='fx'?'on':''}" onclick="cycleDraft.pickMode='fx';renderCycle()">變形工時日</div></div>
@@ -355,6 +377,7 @@ function renderCycle(){
     <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份（草稿）</div>
     <div style="font-size:12px;color:var(--mut);margin-top:6px">建立後會再讓你確認國假/變形工時，確認無誤才開放員工填報。</div></div>`);
 }
+function resetCycleDraft(){ cycleDraft={nh:{},fx:{},pickMode:'nh'}; }
 function cycleCalHtml(nm){
   const days=monthDays(nm), first=new Date(days[0]).getDay()||7;
   let c=''; for(let i=1;i<first;i++)c+='<div></div>';
@@ -397,12 +420,12 @@ function cycleConfirmScreen(nm,data){
     <div class="grp">變形工時日（${(data.flex[0]?data.flex[0].dates.length:0)}，最多 ${data.flex[0]?data.flex[0].max_days:'-'} 天）</div>
     <div>${data.flex[0]?data.flex[0].dates.map(d=>`<span class="tag" style="margin:2px;background:#faeeda;color:#633806">${d.slice(5)}</span>`).join(''):'<span style="color:var(--mut)">無</span>'}</div>
     <div class="btn pri" style="margin-top:14px" onclick="openStage1('${nm}')">✓ 確認無誤，開放員工填報</div>
-    <div class="btn" style="margin-top:8px" onclick="renderCycle()">返回修改</div>
+    <div class="btn" style="margin-top:8px" onclick="adminTab='cycle';renderAdmin()">返回修改</div>
     <div style="font-size:12px;color:var(--mut);margin-top:6px">未開放前，員工的「下月登記」會顯示「尚未開放」。</div></div>`);
 }
 async function openStage1(nm){
-  toast('開放中…'); const r=await api('openStage1',{ym:nm,shift:S.me.shift});
-  if(r.success){toast(nm+' 已開放填報（'+r.data.shifts+' 班）');renderAdmin();}else toast('開放：'+r.error);
+  toast('開放中…'); const r=await api('openStage1',{ym:nm,shift:adminShift});
+  if(r.success){toast(nm+' 已開放填報（'+r.data.shifts+' 班）');resetCycleDraft();adminTab='mt';renderAdmin();}else toast('開放：'+r.error);
 }
 
 // 取得靜態資料（員工/機台），快取
@@ -594,15 +617,15 @@ function gridHtml(g){
   });
   return h+'</table>';
 }
-async function runAuto(){ toast('自動排班中…'); const r=await api('autoAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('草稿完成');renderAdmin();}else toast('排班：'+r.error); }
-async function clearMonth(){ if(!confirm('確定清除 '+S.ym+' '+S.me.shift+' 整月排班？'))return; toast('清除中…'); const r=await api('clearAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('已清除 '+(r.data&&r.data.cleared||0)+' 日');renderAdmin();}else toast('清除：'+r.error); }
+async function runAuto(){ toast('自動排班中…'); const r=await api('autoAssign',{ym:S.ym,shift:adminShift}); if(r.success){toast('草稿完成');admMT();}else toast('排班：'+r.error); }
+async function clearMonth(){ if(!confirm('確定清除 '+S.ym+' '+adminShift+' 整月排班？'))return; toast('清除中…'); const r=await api('clearAssign',{ym:S.ym,shift:adminShift}); if(r.success){toast('已清除 '+(r.data&&r.data.cleared||0)+' 日');admMT();}else toast('清除：'+r.error); }
 async function delMonth(){
   if(!confirm('⚠️ 刪除整個 '+S.ym+' 月份？\n會刪除四班人機表、所有請假/加班/雙棲登記與月份設定，無法復原。'))return;
   if(!confirm('再次確認：真的要刪除 '+S.ym+' 嗎？'))return;
   toast('刪除中…'); const r=await api('deleteMonth',{ym:S.ym});
   if(r.success){toast(S.ym+' 已刪除');renderAdmin();}else toast('刪除：'+r.error);
 }
-async function doExport(){ toast('產生 Excel…'); const r=await api('exportExcel',{ym:S.ym,shift:S.me.shift}); if(r.success&&r.data.url){window.open(r.data.url,'_blank');toast('已產生，開始下載');}else toast(r.success?'demo：已產生 EXPORT 分頁':'匯出：'+r.error); }
+async function doExport(){ toast('產生 Excel…'); const r=await api('exportExcel',{ym:S.ym,shift:adminShift}); if(r.success&&r.data.url){window.open(r.data.url,'_blank');toast('已產生，開始下載');}else toast(r.success?'demo：已產生 EXPORT 分頁':'匯出：'+r.error); }
 
 // ============================================================
 // Mock 資料（API_BASE 為空時使用，純前端 demo）
