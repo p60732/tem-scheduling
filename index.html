@@ -437,28 +437,28 @@ async function loadStatic(force){
   return {members:[],tools:[]};
 }
 
-// 人力清單（管理員）— 列出 / 新增 / 編輯
+// 人力清單（管理員）— 班別分頁 / 新增 / 編輯
+let empShiftTab='DA';
 async function admEmp(){
   admShell('人力清單','<div class="card">載入中…</div>');
-  const d=await loadStatic();
-  const body=document.querySelector('.body');
-  body.innerHTML=`<div class="card">
-    <div class="row"><b>人力清單（${d.members.length}）</b><span class="pill" onclick="empModal()">＋ 新增員工</span></div>
-    <input class="in" id="empq" placeholder="搜尋 工號/姓名" oninput="filterEmp()">
-    <div id="emplist">${empRows(d.members)}</div></div>`;
+  await loadStatic();
+  renderEmpList();
+}
+function renderEmpList(){
+  const ppl=_static.members.filter(m=>m.shift===empShiftTab);
+  const seg=`<div class="seg">${['DA','DB','NA','NB'].map(s=>`<div class="${empShiftTab===s?'on':''}" onclick="empShiftTab='${s}';renderEmpList()">${s}（${_static.members.filter(m=>m.shift===s).length}）</div>`).join('')}</div>`;
+  document.querySelector('.body').innerHTML=`<div class="card">
+    <div class="row" style="border:none;padding-bottom:6px"><b>人力清單</b><span class="pill" onclick="empModal()">＋ 新增員工</span></div>
+    ${seg}
+    <input class="in" id="empq" placeholder="搜尋 ${empShiftTab} 班 工號/姓名" oninput="filterEmp()">
+    <div id="emplist">${empRows(ppl)}</div></div>`;
 }
 function empRows(ms){
-  const order=['DA','DB','NA','NB']; let h='';
-  order.forEach(sf=>{
-    const grp=ms.filter(m=>m.shift===sf); if(!grp.length)return;
-    h+=`<div class="grp" style="background:var(--bg);margin:8px -14px 0;padding:6px 14px">${sf} 班（${grp.length}）</div>`;
-    h+=grp.map(m=>`<div class="row" onclick='empModal(${JSON.stringify(m)})'>
-      <span>${m.name} <span style="color:var(--mut)">${m.empId}·${m.site}</span>${m.role!=='employee'?` <span class="tag">${m.role}</span>`:''}${(m.skills||[]).includes('產假')?' <span class="tag" style="background:#fbeaf0;color:#993556">產假</span>':''}</span>
-      <span class="pill">編輯 ›</span></div>`).join('');
-  });
-  return h;
+  return ms.map(m=>`<div class="row" onclick='empModal(${JSON.stringify(m)})'>
+    <span>${m.name} <span style="color:var(--mut)">${m.empId}·${m.site}</span>${m.role!=='employee'?` <span class="tag">${m.role}</span>`:''}${(m.skills||[]).includes('產假')?' <span class="tag" style="background:#fbeaf0;color:#993556">產假</span>':''}</span>
+    <span class="pill">編輯 ›</span></div>`).join('');
 }
-function filterEmp(){const q=document.getElementById('empq').value.trim();const ms=_static.members.filter(m=>m.empId.includes(q)||m.name.includes(q));document.getElementById('emplist').innerHTML=empRows(ms);}
+function filterEmp(){const q=document.getElementById('empq').value.trim();const ms=_static.members.filter(m=>m.shift===empShiftTab&&(m.empId.includes(q)||m.name.includes(q)));document.getElementById('emplist').innerHTML=empRows(ms);}
 let editingEmp=null;
 function empModal(m){
   m=m||{empId:'',name:'',shift:'DA',site:'P6',role:'employee',skills:['nonCS']};
@@ -487,9 +487,9 @@ async function saveEmp(){
   if(document.getElementById('m_mat').classList.contains('on'))sk.push('產假');
   d.skills=sk.length?sk:['nonCS'];
   closeModal();toast('儲存中…');const r=await api('upsertEmployee',d);
-  if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);
+  if(r.success){empShiftTab=d.shift;await loadStatic(true);renderEmpList();toast('已儲存 '+d.name);}else toast('儲存失敗：'+(r.error||'未知錯誤'));
 }
-async function delEmp(id){closeModal();toast('刪除中…');const r=await api('deleteEmployee',{empId:id});if(r.success){await loadStatic(true);admEmp();}else toast('失敗：'+r.error);}
+async function delEmp(id){closeModal();toast('刪除中…');const r=await api('deleteEmployee',{empId:id});if(r.success){await loadStatic(true);renderEmpList();toast('已刪除');}else toast('刪除失敗：'+(r.error||''));}
 
 // 機台清單（管理員）
 async function admTool(){
