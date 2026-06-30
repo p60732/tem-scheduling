@@ -333,9 +333,9 @@ async function admMT(){
     <div class="warn">提示：P7空機 / 剩餘人力 / FIB未排（鎖定前檢查）</div>
     <div class="grp">整月（${adminShift} 班）</div>
     <div class="g2"><div class="btn" onclick="runAuto()">自動排班</div><div class="btn dg" onclick="clearMonth()">整月清除</div></div>
-    <div class="grp">輸出</div>
-    <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（待接）')">截圖存圖</div></div>
-    <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
+    <div class="grp">設定</div>
+    <div class="g2"><div class="btn" onclick="autoPairEditor()">AUTO 配對設定</div><div class="btn" onclick="doExport()">匯出 Excel</div></div>
+    <div class="g2" style="margin-top:8px"><div class="btn" onclick="toast('截圖存圖（待接）')">截圖存圖</div><div class="btn pri" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div></div>
     <div class="btn dg" style="margin-top:8px" onclick="delMonth()">刪除此月份（${S.ym}）</div>
   </div>`;
 }
@@ -374,8 +374,7 @@ function renderCycle(){
     <div class="row" style="margin-top:6px"><span>變形工時：最多加班天數</span><input class="in" id="fxmax" style="width:90px" value="2"></div>
     <div class="grp">② Stage 截止時間（已預設，每階段約 6 個上班日）</div>
     ${['s1','s2','s3'].map((s,i)=>`<div class="row"><span>Stage${i+1}</span><input class="in" id="${s}" style="width:170px" type="date" value="${cycleDraft.dl[s]}" onchange="cycleDraft.dl['${s}']=this.value"></div>`).join('')}
-    <div class="grp">③ AUTO 機台配對組合</div>
-    <div class="row"><span style="color:var(--mut);font-size:13px">設定哪些 AUTO 機台兩兩一組</span><span class="pill" onclick="autoPairEditor()">編輯配對 ›</span></div>
+    <div style="font-size:12px;color:var(--mut);margin-top:10px"><i class="ti"></i>AUTO 配對組合請於「人機表」分頁設定。</div>
     <div class="btn pri" style="margin-top:14px" onclick="saveCycle()">建立月份（草稿）</div>
     <div style="font-size:12px;color:var(--mut);margin-top:6px">建立後會再讓你確認國假/變形工時，確認無誤才開放員工填報。</div></div>`);
 }
@@ -408,9 +407,8 @@ async function autoPairEditor(){
   openModal(html);
 }
 async function savePair(id,group){
-  const t=(_static.tools||[]).find(x=>x.tool_id===id)||{};
-  await api('upsertMachine',{tool_id:id,site:t.site,type:t.type,status:t.status,auto_pair:group.trim(),sort_order:t.sort_order,toolName:id});
-  await loadStatic(true); toast(id+' 配對組='+group);
+  const r=await api('upsertMachine',{tool_id:id,auto_pair:group.trim()});
+  await loadStatic(true); toast(r.success?(id+' 組編號='+group):('失敗：'+r.error));
 }
 async function saveCycle(){
   const nm=nextMonth();
@@ -504,30 +502,35 @@ async function delEmp(id){closeModal();toast('刪除中…');const r=await api('
 async function admTool(){
   admShell('機台清單','<div class="card">載入中…</div>');
   const d=await loadStatic();
+  const skillOf=t=>((t.skills||[]).find(s=>['CS','nonCS','ARM'].includes(s))||'nonCS');
   document.querySelector('.body').innerHTML=`<div class="card">
     <div class="row"><b>機台清單（${d.tools.length}）</b><span class="pill" onclick="toolModal()">＋ 新增機台</span></div>
+    <div style="font-size:12px;color:var(--mut);margin:0 0 4px">機型＝操作技能（CS／nonCS／ARM）；有 AUTO＝可一人顧兩機</div>
     ${d.tools.map(t=>`<div class="row" onclick='toolModal(${JSON.stringify(t)})'>
-      <span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut);font-family:var(--font-sans)">${t.site}·${t.type}·${t.status}</span></span>
+      <span style="font-family:ui-monospace,monospace">${t.tool_id} <span style="color:var(--mut);font-family:var(--font-sans)">${t.site}·${skillOf(t)}</span>${(t.type==='auto'||t.status==='AUTO')?' <span class="tag" style="background:#e6f1fb;color:#0c447c">AUTO</span>':''}</span>
       <span class="pill">編輯 ›</span></div>`).join('')}</div>`;
 }
 function toolModal(t){
-  t=t||{tool_id:'',site:'P2',type:'manual',status:'ACTIVE',auto_pair:'',sort_order:99};
+  t=t||{tool_id:'',site:'P2',type:'manual',status:'ACTIVE',skills:['CS'],sort_order:99};
+  const skill=(t.skills||[]).find(s=>['CS','nonCS','ARM'].includes(s))||'nonCS';
+  const canAuto=t.type==='auto'||t.status==='AUTO';
   openModal(`<h3>${t.tool_id?'編輯':'新增'}機台</h3>
     <div class="lbl">機台 ID</div><input class="in" id="t_id" value="${t.tool_id}" ${t.tool_id?'disabled':''}>
     <div class="lbl">Site</div><select class="in" id="t_site">${['P2','P6','P7','P8'].map(s=>`<option ${t.site===s?'selected':''}>${s}</option>`).join('')}</select>
-    <div class="lbl">型態</div><select class="in" id="t_type">${['manual','auto'].map(s=>`<option ${t.type===s?'selected':''}>${s}</option>`).join('')}</select>
-    <div class="lbl">AUTO 配對組（如 P2_1A，可空）</div><input class="in" id="t_pair" value="${t.auto_pair||''}">
+    <div class="lbl">機型（操作技能）</div><select class="in" id="t_skill">${['CS','nonCS','ARM'].map(s=>`<option ${skill===s?'selected':''}>${s}</option>`).join('')}</select>
+    <div class="opt" style="margin-top:10px"><span>可 AUTO（一人顧兩機）</span><span class="sw ${canAuto?'on':''}" id="t_auto" onclick="this.classList.toggle('on')"></span></div>
     <div class="btn pri" style="margin-top:12px" onclick="saveTool(${t.sort_order||99})">儲存</div>
     ${t.tool_id?`<div class="btn dg" style="margin-top:8px" onclick="delTool('${t.tool_id}')">刪除機台</div>`:''}`);
 }
-async function delTool(id){closeModal();toast('刪除中…');const r=await api('deleteMachine',{tool_id:id});if(r.success){await loadStatic(true);admTool();}else toast('失敗：'+r.error);}
+async function delTool(id){closeModal();toast('刪除中…');const r=await api('deleteMachine',{tool_id:id});if(r.success){await loadStatic(true);admTool();}else toast('刪除失敗：'+(r.error||''));}
 async function saveTool(sort){
-  const type=document.getElementById('t_type').value;
-  const d={tool_id:document.getElementById('t_id').value.trim(),site:document.getElementById('t_site').value,type:type,
-    status:type==='auto'?'AUTO':'ACTIVE',auto_pair:document.getElementById('t_pair').value.trim(),sort_order:sort,toolName:document.getElementById('t_id').value.trim()};
-  if(!d.tool_id){toast('機台 ID 必填');return;}
+  const id=document.getElementById('t_id').value.trim(); if(!id){toast('機台 ID 必填');return;}
+  const canAuto=document.getElementById('t_auto').classList.contains('on');
+  const skill=document.getElementById('t_skill').value;
+  const d={tool_id:id,site:document.getElementById('t_site').value,skills:[skill],
+    type:canAuto?'auto':'manual',status:canAuto?'AUTO':'ACTIVE',sort_order:sort,toolName:id};
   closeModal();toast('儲存中…');const r=await api('upsertMachine',d);
-  if(r.success){await loadStatic(true);admTool();}else toast('失敗：'+r.error);
+  if(r.success){await loadStatic(true);admTool();toast('已儲存 '+id);}else toast('儲存失敗：'+(r.error||''));
 }
 
 // 機台狀態排程（管理員）
