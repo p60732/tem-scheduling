@@ -194,7 +194,7 @@ function calHtml(days){
   for(let i=1;i<first;i++) cells+='<div></div>';
   days.forEach(x=>{
     const dn=Number(x.date.slice(8));
-    if(x.type==='work'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell work"><div class="dn">${dn}</div><div class="st">${x.site||''}</div><div class="mc">${m}</div></div>`;}
+    if(x.type==='work'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell work"><div class="dn">${dn}</div><div class="st">${x.site||'上班'}</div><div class="mc">${m}</div></div>`;}
     else if(x.type==='ot'){const m=x.assign&&x.assign.kind==='dispatch'?'<span class="tag">派</span>':(x.assign&&x.assign.toolId||'');cells+=`<div class="cell ot"><div class="dn">${dn}</div><div class="st">加班 ${x.site||''}</div><div class="mc">${m}</div></div>`;}
     else if(x.type==='leave'){cells+=`<div class="cell lv"><div class="dn">${dn}</div><div class="st">${(x.leave||'').replace('預排-','')}</div></div>`;}
     else {cells+=`<div class="cell offday"><div class="dn">${dn}</div>${x.block?'<span class="xx">✕</span>':'<div class="st" style="color:#5f5e5a;font-weight:400;font-size:11px">休</div>'}</div>`;}
