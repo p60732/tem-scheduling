@@ -307,6 +307,7 @@ async function renderAdmin(){
       <div class="grp">輸出</div>
       <div class="g2"><div class="btn" onclick="doExport()">匯出 Excel</div><div class="btn" onclick="toast('截圖存圖（前端 canvas，待接）')">截圖存圖</div></div>
       <div class="btn pri" style="margin-top:10px" onclick="toast('鎖定公布＋精簡保留')">鎖定公布</div>
+      <div class="btn dg" style="margin-top:8px" onclick="delMonth()">刪除此月份（${S.ym}）</div>
     </div>
     <div class="card"><b>管理設定</b>
       ${[['建立月份','admCycle'],['人力清單（角色/技能/產假）','admEmp'],['機台清單','admTool'],['機台狀態排程','admMach'],['雙棲人員設定','admFib'],['加班統計','admOt']]
@@ -585,6 +586,12 @@ function gridHtml(g){
 }
 async function runAuto(){ toast('自動排班中…'); const r=await api('autoAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('草稿完成');renderAdmin();}else toast('排班：'+r.error); }
 async function clearMonth(){ if(!confirm('確定清除 '+S.ym+' '+S.me.shift+' 整月排班？'))return; toast('清除中…'); const r=await api('clearAssign',{ym:S.ym,shift:S.me.shift}); if(r.success){toast('已清除 '+(r.data&&r.data.cleared||0)+' 日');renderAdmin();}else toast('清除：'+r.error); }
+async function delMonth(){
+  if(!confirm('⚠️ 刪除整個 '+S.ym+' 月份？\n會刪除四班人機表、所有請假/加班/雙棲登記與月份設定，無法復原。'))return;
+  if(!confirm('再次確認：真的要刪除 '+S.ym+' 嗎？'))return;
+  toast('刪除中…'); const r=await api('deleteMonth',{ym:S.ym});
+  if(r.success){toast(S.ym+' 已刪除');renderAdmin();}else toast('刪除：'+r.error);
+}
 async function doExport(){ toast('產生 Excel…'); const r=await api('exportExcel',{ym:S.ym,shift:S.me.shift}); if(r.success&&r.data.url){window.open(r.data.url,'_blank');toast('已產生，開始下載');}else toast(r.success?'demo：已產生 EXPORT 分頁':'匯出：'+r.error); }
 
 // ============================================================
