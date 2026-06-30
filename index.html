@@ -266,16 +266,26 @@ async function submitReg(nm){
 function nextMonth(){const[y,m]=S.ym.split('-').map(Number);const d=new Date(y,m,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
 
 // ── 分頁3：加班通知 ──────────────────────────────────────
-function tabOt(){
-  document.getElementById('empbody').innerHTML=`<div class="card"><b>加班通知</b>
-    <div class="warn">7/05（六）P8 加班邀請 · 剩 41:20</div>
-    <div class="g2"><div class="btn" style="background:var(--okbg);color:var(--ok);border-color:#5dcaa5" onclick="otReply(true)">接受</div>
-    <div class="btn dg" onclick="otReply(false)">拒絕</div></div>
+async function tabOt(){
+  const b=document.getElementById('empbody'); b.innerHTML='<div class="card">載入中…</div>';
+  const nm=nextMonth();
+  const r=await api('getMyOvertime',{ym:nm});
+  const items=(r.success?r.data.items:[]).filter(x=>x.status==='pending');
+  if(!items.length){
+    b.innerHTML=`<div class="card" style="text-align:center;color:var(--mut)">
+      <div style="font-size:40px">🔔</div>
+      <div style="font-size:15px;margin:8px 0;color:var(--ink)">目前沒有加班通知</div>
+      <div style="font-size:13px">有加班邀請時會出現在這裡，需 48 小時內回覆。</div></div>`;
+    return;
+  }
+  b.innerHTML=`<div class="card"><b>加班通知 · ${nm}</b>${items.map((x,i)=>`
+    <div class="warn" style="margin-top:8px">${x.date.slice(5)} 加班邀請</div>
+    <div class="g2"><div class="btn" style="background:var(--okbg);color:var(--ok);border-color:#5dcaa5" onclick="otReply('${x.date}',true)">接受</div>
+    <div class="btn dg" onclick="otReply('${x.date}',false)">拒絕</div></div>`).join('')}
     <div class="lbl">接受→選類別</div>
-    <select class="in"><option>加班-報補休</option><option>加班-報加班費</option></select>
-    <div style="font-size:12px;color:var(--mut);margin-top:8px">進系統時自動檢查未讀加班通知。</div></div>`;
+    <select class="in"><option>加班-報補休</option><option>加班-報加班費</option></select></div>`;
 }
-function otReply(ok){ toast(ok?'已接受':'已拒絕，將詢問是否參加第二輪'); }
+function otReply(date,ok){ toast(ok?(date.slice(5)+' 已接受'):(date.slice(5)+' 已拒絕，將詢問是否參加第二輪')); }
 
 // ── 分頁4：我的 ─────────────────────────────────────────
 function tabMe(){
